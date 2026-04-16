@@ -24,7 +24,9 @@ class WebServer {
         const corsOptions = {
             origin: [
                 'http://localhost:4200',
-                'http://3.142.186.227:4200'
+                'http://3.142.186.227:4200',
+                'https://redcemed.com',
+                'http://redcemed.com'
             ],
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

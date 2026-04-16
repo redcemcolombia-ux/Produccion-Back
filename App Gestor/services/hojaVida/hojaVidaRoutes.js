@@ -1670,6 +1670,95 @@ router.get('/biometria/info/:aspiranteId', async (req, res) => {
     }
 });
 
+router.put('/upload_psicologia/', upload.single('pdf'), async (req, res) => {
+    try {
+
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        let payload;
+
+        try {
+            payload = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+
+        const { id_aspirante, id_usuario } = req.body;
+
+        if (!id_aspirante || !id_usuario || !req.file) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: "Faltan parámetros (id_aspirante, id_usuario, pdf)" }
+            });
+        }
+
+
+        const registro = await HojaVida.findById(id_aspirante);
+        if (!registro) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: "Aspirante no encontrado" }
+            });
+        }
+
+
+        const nombreArchivo = `${id_aspirante}_${Date.now()}.pdf`;
+        const rutaRelativa = `psicologia/${nombreArchivo}`;
+        const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+
+        const dir = path.dirname(rutaAbsoluta);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+
+        if (registro.RUTA_PSICOLOGIA && registro.RUTA_PSICOLOGIA.ruta) {
+            const oldPath = path.join(__dirname, '../../storage', registro.RUTA_PSICOLOGIA.ruta);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
+
+
+        fs.writeFileSync(rutaAbsoluta, req.file.buffer);
+
+
+        registro.RUTA_PSICOLOGIA = {
+            ruta: rutaRelativa,
+            id_usuario,
+            fecha: new Date()
+        };
+
+        await registro.save();
+
+        return res.json({
+            error: 0,
+            response: {
+                mensaje: "PDF de psicología cargado exitosamente",
+                id_aspirante: id_aspirante,
+                psicologia: registro.RUTA_PSICOLOGIA
+            }
+        });
+
+    } catch (error) {
+        console.error("Error inesperado:", error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: "Error inesperado",
+                detalle: error.message
+            }
+        });
+    }
+});
+
 
 
 module.exports = router;

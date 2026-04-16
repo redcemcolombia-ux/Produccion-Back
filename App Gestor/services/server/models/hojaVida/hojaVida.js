@@ -50,6 +50,11 @@ const hojaVidaSchema = new mongoose.Schema(
             ruta: { type: String, default: null },
             id_usuario: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
             fecha: { type: Date, default: null }
+        },
+        RUTA_PSICOLOGIA: {
+            ruta: { type: String, default: null },
+            id_usuario: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            fecha: { type: Date, default: null }
         }
 
     },

@@ -1759,6 +1759,83 @@ router.put('/upload_psicologia/', upload.single('pdf'), async (req, res) => {
     }
 });
 
+router.get('/psicologia/descargar/:aspiranteId', async (req, res) => {
+    try {
+
+        const authHeader = req.headers['authorization'];
+
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+
+        let payload;
+        try {
+            payload = jwt.verify(token, secret);
+        } catch (err) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+
+        const { aspiranteId } = req.params;
+
+
+        const registro = await HojaVida.findById(aspiranteId);
+
+        if (!registro) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Aspirante no encontrado' }
+            });
+        }
+
+
+        if (
+            !registro.RUTA_PSICOLOGIA ||
+            !registro.RUTA_PSICOLOGIA.ruta ||
+            registro.RUTA_PSICOLOGIA.ruta.trim() === ''
+        ) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'El aspirante no tiene PDF de psicología cargado' }
+            });
+        }
+
+
+        const rutaRelativa = registro.RUTA_PSICOLOGIA.ruta;
+        const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+
+
+        if (!fs.existsSync(rutaAbsoluta)) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'El archivo de psicología no existe en el servidor' }
+            });
+        }
+
+
+        return res.download(rutaAbsoluta, `psicologia_${aspiranteId}.pdf`);
+
+    } catch (error) {
+        console.error('Error inesperado:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error inesperado',
+                detalle: error.message
+            }
+        });
+    }
+});
+
 
 
 module.exports = router;

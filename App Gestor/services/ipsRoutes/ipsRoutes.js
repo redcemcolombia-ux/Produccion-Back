@@ -134,7 +134,6 @@ router.post('/crearIps', async (req, res) => {
 
 router.post('/actualizar', async (req, res) => {
     try {
-        
         const authHeader = req.headers['authorization'] || req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({ error: 1, response: { mensaje: 'Token requerido' } });
@@ -150,18 +149,140 @@ router.post('/actualizar', async (req, res) => {
             return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
         }
 
-        const { id, ...updateData } = req.body;
+        const { id, ...datosActualizacion } = req.body;
 
         if (!id) {
             return res.status(400).json({ error: 1, response: { mensaje: 'Se requiere el id de la IPS a actualizar' } });
         }
 
-        
-        const ipsActualizada = await IPS.findByIdAndUpdate(id, updateData, { new: true });
-
-        if (!ipsActualizada) {
+        // Verificar que la IPS existe
+        const ipsExistente = await IPS.findById(id).lean();
+        if (!ipsExistente) {
             return res.status(404).json({ error: 1, response: { mensaje: `No se encontró la IPS con id '${id}'` } });
         }
+
+        // Objeto para almacenar los campos a actualizar
+        const updateData = {};
+
+        // Validar y procesar NOMBRE_IPS
+        if (datosActualizacion.NOMBRE_IPS !== undefined) {
+            const nombreTrim = datosActualizacion.NOMBRE_IPS.trim();
+            if (nombreTrim !== ipsExistente.NOMBRE_IPS) {
+                const existentePorNombre = await IPS.findOne({
+                    NOMBRE_IPS: nombreTrim,
+                    _id: { $ne: id }
+                }).lean();
+
+                if (existentePorNombre) {
+                    return res.status(400).json({
+                        error: 1,
+                        response: { mensaje: `El nombre de IPS '${nombreTrim}' ya está en uso` }
+                    });
+                }
+            }
+            updateData.NOMBRE_IPS = nombreTrim;
+        }
+
+        // Validar y procesar NIT
+        if (datosActualizacion.NIT !== undefined && datosActualizacion.NIT.trim() !== '') {
+            const nitTrim = datosActualizacion.NIT.trim();
+            if (nitTrim !== ipsExistente.NIT) {
+                const existentePorNIT = await IPS.findOne({
+                    NIT: nitTrim,
+                    _id: { $ne: id }
+                }).lean();
+
+                if (existentePorNIT) {
+                    return res.status(400).json({
+                        error: 1,
+                        response: { mensaje: `El NIT '${nitTrim}' ya está registrado` }
+                    });
+                }
+            }
+            updateData.NIT = nitTrim;
+        }
+
+        // Validar y procesar CORREO
+        if (datosActualizacion.CORREO !== undefined && datosActualizacion.CORREO.trim() !== '') {
+            const correoTrim = datosActualizacion.CORREO.trim();
+
+            // Validar formato de correo
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(correoTrim)) {
+                return res.status(400).json({
+                    error: 1,
+                    response: { mensaje: 'El formato del correo electrónico no es válido' }
+                });
+            }
+
+            if (correoTrim !== ipsExistente.CORREO) {
+                const existentePorCorreo = await IPS.findOne({
+                    CORREO: correoTrim,
+                    _id: { $ne: id }
+                }).lean();
+
+                if (existentePorCorreo) {
+                    return res.status(400).json({
+                        error: 1,
+                        response: { mensaje: `El correo '${correoTrim}' ya está registrado` }
+                    });
+                }
+            }
+            updateData.CORREO = correoTrim;
+        }
+
+        // Procesar otros campos (trim si son strings)
+        if (datosActualizacion.DIRECCION !== undefined) {
+            updateData.DIRECCION = typeof datosActualizacion.DIRECCION === 'string'
+                ? datosActualizacion.DIRECCION.trim()
+                : datosActualizacion.DIRECCION;
+        }
+        if (datosActualizacion.TELEFONO !== undefined) {
+            updateData.TELEFONO = typeof datosActualizacion.TELEFONO === 'string'
+                ? datosActualizacion.TELEFONO.trim()
+                : datosActualizacion.TELEFONO;
+        }
+        if (datosActualizacion.REPRESENTANTE !== undefined) {
+            updateData.REPRESENTANTE = typeof datosActualizacion.REPRESENTANTE === 'string'
+                ? datosActualizacion.REPRESENTANTE.trim()
+                : datosActualizacion.REPRESENTANTE;
+        }
+        if (datosActualizacion.CIUDAD !== undefined) {
+            updateData.CIUDAD = typeof datosActualizacion.CIUDAD === 'string'
+                ? datosActualizacion.CIUDAD.trim()
+                : datosActualizacion.CIUDAD;
+        }
+        if (datosActualizacion.DEPARTAMENTO !== undefined) {
+            updateData.DEPARTAMENTO = typeof datosActualizacion.DEPARTAMENTO === 'string'
+                ? datosActualizacion.DEPARTAMENTO.trim()
+                : datosActualizacion.DEPARTAMENTO;
+        }
+        if (datosActualizacion.REGIONAL !== undefined) {
+            updateData.REGIONAL = typeof datosActualizacion.REGIONAL === 'string'
+                ? datosActualizacion.REGIONAL.trim()
+                : datosActualizacion.REGIONAL;
+        }
+        if (datosActualizacion.ESTADO !== undefined) {
+            updateData.ESTADO = typeof datosActualizacion.ESTADO === 'string'
+                ? datosActualizacion.ESTADO.trim()
+                : datosActualizacion.ESTADO;
+        }
+        if (datosActualizacion.COMPLEMENTARIA_1 !== undefined) {
+            updateData.COMPLEMENTARIA_1 = datosActualizacion.COMPLEMENTARIA_1;
+        }
+        if (datosActualizacion.COMPLEMENTARIA_2 !== undefined) {
+            updateData.COMPLEMENTARIA_2 = datosActualizacion.COMPLEMENTARIA_2;
+        }
+
+        // Actualizar solo si hay campos para actualizar
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'No se proporcionaron campos para actualizar' }
+            });
+        }
+
+        const ipsActualizada = await IPS.findByIdAndUpdate(id, updateData, { new: true }).lean();
 
         return res.status(200).json({
             error: 0,

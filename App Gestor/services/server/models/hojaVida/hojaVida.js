@@ -65,7 +65,9 @@ const hojaVidaSchema = new mongoose.Schema(
         ESTADO_CIERRE: { type: String, default: null },
         NOTAS_CIERRE: { type: String, default: null },
         TIPO_CIERRE: { type: String, default: null },
-        FECHA_CIERRE: { type: Date, default: null }
+        FECHA_CIERRE: { type: Date, default: null },
+        // Campo de segunda gestión IPS
+        SEGUNDA_GESTION_IPS: { type: Boolean, default: false }
 
     },
     { timestamps: true, collection: 'cl_hoja_vida' }

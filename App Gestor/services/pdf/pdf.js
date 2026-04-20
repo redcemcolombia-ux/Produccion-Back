@@ -106,6 +106,76 @@ router.put('/pdf', (req, res, next) => {
     }
 });
 
+router.put('/segunda-gestion', (req, res, next) => {
+    upload.single('pdf')(req, res, (err) => {
+        if (err) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({
+                    error: 1,
+                    response: { mensaje: 'El archivo excede el límite de 40 MB' }
+                });
+            }
+            if (err.message === 'Solo se permiten archivos PDF') {
+                return res.status(400).json({
+                    error: 1,
+                    response: { mensaje: 'Solo se permiten archivos PDF' }
+                });
+            }
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'Error al procesar el archivo' }
+            });
+        }
+        next();
+    });
+}, async (req, res) => {
+    try {
+        const { id, token } = req.body;
+
+        if (!id || !token || !req.file) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'Faltan parámetros requeridos' } });
+        }
+
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return res.status(500).json({ error: 1, response: { mensaje: 'Servidor sin JWT_SECRET configurado' } });
+
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
+        }
+
+        const pdfUrl = `/uploads/pdf/${req.file.filename}`;
+        const update = await HojaVida.findByIdAndUpdate(
+            id,
+            {
+                PDF_URL: pdfUrl,
+                ESTADO: "EN ESPERA",
+                SEGUNDA_GESTION_IPS: true
+            },
+            { new: true }
+        );
+
+        if (!update) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'No se encontró el documento' } });
+        }
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'PDF almacenado correctamente con segunda gestión IPS',
+                id: update._id,
+                url: pdfUrl,
+                segunda_gestion_ips: true
+            }
+        });
+
+    } catch (err) {
+        console.error('Error en /api/pdf/segunda-gestion:', err);
+        return res.status(500).json({ error: 1, response: { mensaje: 'Error inesperado al guardar el PDF' } });
+    }
+});
+
 // Servicio para mostrar/descargar PDFs
 router.get('/pdf/:filename', async (req, res) => {
     try {

@@ -1942,5 +1942,90 @@ router.put('/cierre/gestionar', async (req, res) => {
     }
 });
 
+router.post('/casos/retorno-ips', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        // Obtener id_ips del body
+        const { id_ips } = req.body;
+
+        if (!id_ips) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_ips es obligatorio' }
+            });
+        }
+
+        // Verificar que la IPS existe
+        const ips = await IPS.findById(id_ips).lean();
+        if (!ips) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'IPS no encontrada' }
+            });
+        }
+
+        // Buscar hojas de vida con los filtros
+        const hojasVida = await HojaVida.find({
+            TIPO_CIERRE: 'Retorno Ips',
+            IPS_ID: id_ips
+        })
+        .populate('IPS_ID', 'NOMBRE_IPS NIT CORREO TELEFONO DIRECCION CIUDAD DEPARTAMENTO REGIONAL')
+        .populate('USUARIO_ID', 'NOMBRE CORREO TELEFONO ROL')
+        .populate('USUARIO_GESTOR_CIERRE', 'NOMBRE CORREO TELEFONO ROL')
+        .populate('RUTA_BIOMETRIA.id_usuario', 'NOMBRE CORREO')
+        .populate('RUTA_PSICOLOGIA.id_usuario', 'NOMBRE CORREO')
+        .lean();
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: `Casos de retorno IPS encontrados: ${hojasVida.length}`,
+                total: hojasVida.length,
+                ips: {
+                    id: ips._id,
+                    nombre: ips.NOMBRE_IPS
+                },
+                casos: hojasVida
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en /casos/retorno-ips:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error inesperado',
+                detalle: error.message
+            }
+        });
+    }
+});
+
 
 module.exports = router;

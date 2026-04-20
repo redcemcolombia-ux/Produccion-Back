@@ -1836,6 +1836,111 @@ router.get('/psicologia/descargar/:aspiranteId', async (req, res) => {
     }
 });
 
+router.put('/cierre/gestionar', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        // Obtener datos del body
+        const {
+            id_hoja_vida,
+            id_usuario_gestor_cierre,
+            estado_cierre,
+            notas_cierre,
+            tipo_cierre
+        } = req.body;
+
+        // Validar campos obligatorios
+        if (!id_hoja_vida) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_hoja_vida es obligatorio' }
+            });
+        }
+
+        if (!id_usuario_gestor_cierre) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_usuario_gestor_cierre es obligatorio' }
+            });
+        }
+
+        // Verificar que la hoja de vida existe
+        const hojaVida = await HojaVida.findById(id_hoja_vida);
+        if (!hojaVida) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Hoja de vida no encontrada' }
+            });
+        }
+
+        // Verificar que el usuario gestor existe
+        const usuarioGestor = await User.findById(id_usuario_gestor_cierre);
+        if (!usuarioGestor) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Usuario gestor no encontrado' }
+            });
+        }
+
+        // Actualizar los campos de cierre
+        hojaVida.USUARIO_GESTOR_CIERRE = id_usuario_gestor_cierre;
+        hojaVida.ESTADO_CIERRE = estado_cierre || null;
+        hojaVida.NOTAS_CIERRE = notas_cierre || null;
+        hojaVida.TIPO_CIERRE = tipo_cierre || null;
+        hojaVida.FECHA_CIERRE = new Date();
+
+        await hojaVida.save();
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Cierre gestionado exitosamente',
+                datos: {
+                    id_hoja_vida: hojaVida._id,
+                    usuario_gestor: usuarioGestor.NOMBRE,
+                    estado_cierre: hojaVida.ESTADO_CIERRE,
+                    tipo_cierre: hojaVida.TIPO_CIERRE,
+                    fecha_cierre: hojaVida.FECHA_CIERRE
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en /cierre/gestionar:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error inesperado',
+                detalle: error.message
+            }
+        });
+    }
+});
 
 
 module.exports = router;

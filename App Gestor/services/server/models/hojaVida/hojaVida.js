@@ -59,7 +59,13 @@ const hojaVidaSchema = new mongoose.Schema(
             ruta: { type: String, default: null },
             id_usuario: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
             fecha: { type: Date, default: null }
-        }
+        },
+        // Campos de cierre
+        USUARIO_GESTOR_CIERRE: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        ESTADO_CIERRE: { type: String, default: null },
+        NOTAS_CIERRE: { type: String, default: null },
+        TIPO_CIERRE: { type: String, default: null },
+        FECHA_CIERRE: { type: Date, default: null }
 
     },
     { timestamps: true, collection: 'cl_hoja_vida' }

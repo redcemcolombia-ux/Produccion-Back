@@ -292,4 +292,99 @@ router.get('/listar-usuarios', async (req, res) => {
     }
 });
 
+// Servicio para listar todos los registros de un usuario específico
+router.post('/historial-usuario', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        try {
+            jwt.verify(token, secret);
+        } catch (error) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        // Validar parámetro requerido
+        const { id_usuario } = req.body;
+
+        if (!id_usuario) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_usuario es obligatorio' }
+            });
+        }
+
+        // Validar que id_usuario sea un ObjectId válido
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id_usuario)) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_usuario no es un ObjectId válido' }
+            });
+        }
+
+        // Verificar que el usuario existe
+        const usuarioExiste = await User.findById(id_usuario)
+            .populate('Cr_Pe_Codigo')
+            .populate('Cr_Ips')
+            .lean();
+
+        if (!usuarioExiste) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Usuario no encontrado' }
+            });
+        }
+
+        // Buscar todos los registros del usuario (sin importar co_estado)
+        const registros = await ControlUsoIps.find({ id_usuario })
+            .sort({ createdAt: -1 })
+            .lean();
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: `Se encontraron ${registros.length} registros para el usuario`,
+                total: registros.length,
+                usuario: {
+                    id: usuarioExiste._id,
+                    nombre_usuario: usuarioExiste.Cr_Nombre_Usuario,
+                    perfil: usuarioExiste.Cr_Perfil,
+                    persona: usuarioExiste.Cr_Pe_Codigo,
+                    ips: usuarioExiste.Cr_Ips
+                },
+                registros: registros
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en /historial-usuario:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error interno del servidor',
+                detalle: error.message
+            }
+        });
+    }
+});
+
 module.exports = router;

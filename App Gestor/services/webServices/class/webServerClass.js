@@ -11,6 +11,7 @@ const pdf = require('../../pdf/pdf');
 const ipsRoutes = require('../../ipsRoutes/ipsRoutes');
 const notificaciones = require('../../notificaciones/notificaciones');
 const preguntasPsicologia = require('../../psicologia/preguntas');
+const controlUsoIpsRoutes = require('../../controlUsoIps/controlUsoIpsRoutes');
 
 class WebServer {
     constructor(port) {
@@ -64,6 +65,7 @@ class WebServer {
         this.app.use('/api/estado_caso', pdf);
         this.app.use('/api/notificaciones', notificaciones);
         this.app.use('/api/preguntas_psicologia', preguntasPsicologia);
+        this.app.use('/api/control-uso-ips', controlUsoIpsRoutes);
     }
 
     /* _userAuthentication() {

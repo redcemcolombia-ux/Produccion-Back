@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const ControlUsoIps = require('../server/models/controlUsoIps/controlUsoIps');
 const User = require('../server/models/user/user');
 
-const secret = process.env.SECRET || 'EsteEsMiSecreto';
+const secret = process.env.JWT_SECRET || 'EsteEsMiSecreto';
 
 // Servicio para gestionar el control de uso de IPS
 router.post('/gestionar', async (req, res) => {
@@ -18,6 +18,13 @@ router.post('/gestionar', async (req, res) => {
         }
 
         const token = authHeader.substring(7);
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
         try {
             jwt.verify(token, secret);
         } catch (error) {
@@ -37,10 +44,27 @@ router.post('/gestionar', async (req, res) => {
             });
         }
 
+        // Validar que id_usuario sea un ObjectId válido
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id_usuario)) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_usuario no es un ObjectId válido' }
+            });
+        }
+
         if (co_cantidad === undefined || co_cantidad === null) {
             return res.status(400).json({
                 error: 1,
                 response: { mensaje: 'El co_cantidad es obligatorio' }
+            });
+        }
+
+        // Validar que co_cantidad sea un número
+        if (typeof co_cantidad !== 'number' || co_cantidad < 0) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El co_cantidad debe ser un número mayor o igual a 0' }
             });
         }
 
@@ -71,19 +95,20 @@ router.post('/gestionar', async (req, res) => {
                 co_hora_registro
             });
 
-            await nuevoRegistro.save();
+            const registroGuardado = await nuevoRegistro.save();
+            console.log('[/gestionar] Nuevo registro creado:', registroGuardado._id);
 
             return res.status(201).json({
                 error: 0,
                 response: {
                     mensaje: 'Registro creado exitosamente',
                     datos: {
-                        id: nuevoRegistro._id,
-                        id_usuario: nuevoRegistro.id_usuario,
-                        co_cantidad: nuevoRegistro.co_cantidad,
-                        co_estado: nuevoRegistro.co_estado,
-                        co_fecha_registro: nuevoRegistro.co_fecha_registro,
-                        co_hora_registro: nuevoRegistro.co_hora_registro
+                        id: registroGuardado._id,
+                        id_usuario: registroGuardado.id_usuario,
+                        co_cantidad: registroGuardado.co_cantidad,
+                        co_estado: registroGuardado.co_estado,
+                        co_fecha_registro: registroGuardado.co_fecha_registro,
+                        co_hora_registro: registroGuardado.co_hora_registro
                     }
                 }
             });
@@ -95,6 +120,7 @@ router.post('/gestionar', async (req, res) => {
             // Actualizar registro actual con co_estado = false
             registroPrevio.co_estado = false;
             await registroPrevio.save();
+            console.log('[/gestionar] Registro anterior actualizado a inactivo:', registroPrevio._id);
 
             // Crear nuevo registro con los datos recibidos
             const nuevoRegistro = new ControlUsoIps({
@@ -105,7 +131,8 @@ router.post('/gestionar', async (req, res) => {
                 co_hora_registro
             });
 
-            await nuevoRegistro.save();
+            const registroGuardado = await nuevoRegistro.save();
+            console.log('[/gestionar] Nuevo registro creado tras actualizar anterior:', registroGuardado._id);
 
             return res.status(201).json({
                 error: 0,
@@ -116,12 +143,12 @@ router.post('/gestionar', async (req, res) => {
                         co_estado: registroPrevio.co_estado
                     },
                     nuevo_registro: {
-                        id: nuevoRegistro._id,
-                        id_usuario: nuevoRegistro.id_usuario,
-                        co_cantidad: nuevoRegistro.co_cantidad,
-                        co_estado: nuevoRegistro.co_estado,
-                        co_fecha_registro: nuevoRegistro.co_fecha_registro,
-                        co_hora_registro: nuevoRegistro.co_hora_registro
+                        id: registroGuardado._id,
+                        id_usuario: registroGuardado.id_usuario,
+                        co_cantidad: registroGuardado.co_cantidad,
+                        co_estado: registroGuardado.co_estado,
+                        co_fecha_registro: registroGuardado.co_fecha_registro,
+                        co_hora_registro: registroGuardado.co_hora_registro
                     }
                 }
             });
@@ -160,6 +187,7 @@ router.post('/gestionar', async (req, res) => {
 
     } catch (error) {
         console.error('Error en /gestionar:', error);
+        console.error('Stack trace:', error.stack);
         return res.status(500).json({
             error: 1,
             response: {
@@ -183,10 +211,16 @@ router.get('/listar-usuarios', async (req, res) => {
         }
 
         const token = authHeader.substring(7);
-        const secretJWT = process.env.JWT_SECRET || secret;
+
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
 
         try {
-            jwt.verify(token, secretJWT);
+            jwt.verify(token, secret);
         } catch (error) {
             return res.status(401).json({
                 error: 1,

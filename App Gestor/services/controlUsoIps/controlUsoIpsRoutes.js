@@ -194,8 +194,8 @@ router.get('/listar-usuarios', async (req, res) => {
             });
         }
 
-        // Buscar usuarios con perfil "usuario"
-        const usuarios = await User.find({ Cr_Perfil: 'usuario' })
+        // Buscar usuarios con perfil "Usuario"
+        const usuarios = await User.find({ Cr_Perfil: 'Usuario' })
             .populate('Cr_Pe_Codigo')
             .populate('Cr_Ips')
             .sort({ createdAt: -1 })
@@ -240,7 +240,7 @@ router.get('/listar-usuarios', async (req, res) => {
         return res.status(200).json({
             error: 0,
             response: {
-                mensaje: `Se encontraron ${usuariosConControl.length} usuarios con perfil 'usuario'`,
+                mensaje: `Se encontraron ${usuariosConControl.length} usuarios con perfil 'Usuario'`,
                 total: usuariosConControl.length,
                 usuarios: usuariosConControl
             }

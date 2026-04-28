@@ -138,6 +138,97 @@ router.post('/crear', async (req, res) => {
     }
 });
 
+router.put('/actualizar', async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token requerido' } });
+        }
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({ error: 1, response: { mensaje: 'Servidor sin JWT_SECRET configurado' } });
+        }
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
+        }
+
+        const { id, ...datosActualizar } = req.body;
+
+        if (!id) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'El ID es obligatorio' } });
+        }
+
+        // Validar que el ID sea válido
+        if (id.length !== 24) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'ID inválido' } });
+        }
+
+        // Verificar que el registro existe
+        const hojaVidaExistente = await HojaVida.findById(id);
+        if (!hojaVidaExistente) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'No se encontró la hoja de vida con el ID proporcionado' } });
+        }
+
+        // Si se está actualizando el DOCUMENTO, verificar que no exista otro registro con ese documento
+        if (datosActualizar.DOCUMENTO && datosActualizar.DOCUMENTO !== hojaVidaExistente.DOCUMENTO) {
+            const documentoExiste = await HojaVida.findOne({
+                DOCUMENTO: datosActualizar.DOCUMENTO,
+                _id: { $ne: id }
+            });
+
+            if (documentoExiste) {
+                return res.status(409).json({
+                    error: 1,
+                    response: {
+                        mensaje: 'El documento ya está registrado en otra hoja de vida',
+                        documento_existente: {
+                            documento: documentoExiste.DOCUMENTO,
+                            nombre: `${documentoExiste.NOMBRE || ''} ${documentoExiste.PRIMER_APELLIDO || ''}`.trim()
+                        }
+                    }
+                });
+            }
+        }
+
+        // Manejar campos especiales con valores por defecto
+        if (datosActualizar.ESTADO_NOTIFICACION === undefined) {
+            datosActualizar.ESTADO_NOTIFICACION = hojaVidaExistente.ESTADO_NOTIFICACION;
+        }
+        if (datosActualizar.H_ESTADO_NOTIFICACION_CONSENTIMIENTO === undefined) {
+            datosActualizar.H_ESTADO_NOTIFICACION_CONSENTIMIENTO = hojaVidaExistente.H_ESTADO_NOTIFICACION_CONSENTIMIENTO;
+        }
+
+        // Actualizar el registro
+        const hojaVidaActualizada = await HojaVida.findByIdAndUpdate(
+            id,
+            datosActualizar,
+            { new: true, runValidators: true }
+        );
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Hoja de vida actualizada exitosamente',
+                hoja_vida: {
+                    id: hojaVidaActualizada._id,
+                    DOCUMENTO: hojaVidaActualizada.DOCUMENTO,
+                    NOMBRE: hojaVidaActualizada.NOMBRE,
+                    PRIMER_APELLIDO: hojaVidaActualizada.PRIMER_APELLIDO,
+                    SEGUNDO_APELLIDO: hojaVidaActualizada.SEGUNDO_APELLIDO,
+                    CORREO: hojaVidaActualizada.CORREO,
+                    CELULAR: hojaVidaActualizada.CELULAR
+                }
+            }
+        });
+    } catch (err) {
+        console.error('Error en /api/hojas-vida/actualizar:', err);
+        return res.status(500).json({ error: 1, response: { mensaje: 'Error interno del servidor' } });
+    }
+});
+
 router.get('/consultar', async (req, res) => {
     try {
 

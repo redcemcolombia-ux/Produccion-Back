@@ -138,7 +138,7 @@ router.post('/crear', async (req, res) => {
     }
 });
 
-router.put('/actualizar', async (req, res) => {
+router.put('/actualizar/:id', async (req, res) => {
     try {
         const authHeader = req.headers['authorization'] || req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -155,7 +155,9 @@ router.put('/actualizar', async (req, res) => {
             return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
         }
 
-        const { id, ...datosActualizar } = req.body;
+        // Obtener ID desde params de la URL
+        const { id } = req.params;
+        const datosActualizar = req.body;
 
         if (!id) {
             return res.status(400).json({ error: 1, response: { mensaje: 'El ID es obligatorio' } });

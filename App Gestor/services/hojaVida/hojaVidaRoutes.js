@@ -620,6 +620,75 @@ router.post('/por_documento', async (req, res) => {
     }
 });
 
+router.post('/validar-descontar-caso', async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token requerido' } });
+        }
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({ error: 1, response: { mensaje: 'Servidor sin JWT_SECRET configurado' } });
+        }
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
+        }
+
+        const { usuario_id } = req.body;
+
+        if (!usuario_id) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'El campo usuario_id es requerido' } });
+        }
+
+        // Validar control de uso de IPS del usuario
+        const controlActivo = await ControlUsoIps.findOne({
+            id_usuario: usuario_id,
+            co_estado: true
+        });
+
+        if (!controlActivo) {
+            return res.status(403).json({
+                error: 1,
+                response: {
+                    mensaje: 'No tiene casos disponibles. Por favor, comuníquese con el administrador para obtener más casos.',
+                    casos_disponibles: 0
+                }
+            });
+        }
+
+        if (controlActivo.co_cantidad <= 0) {
+            return res.status(403).json({
+                error: 1,
+                response: {
+                    mensaje: 'No tiene casos disponibles. Por favor, comuníquese con el administrador para obtener más casos.',
+                    casos_disponibles: 0
+                }
+            });
+        }
+
+        // Descontar 1 caso
+        controlActivo.co_cantidad = controlActivo.co_cantidad - 1;
+        await controlActivo.save();
+        console.log(`[/validar-descontar-caso] Caso consumido. Usuario: ${usuario_id}, Casos restantes: ${controlActivo.co_cantidad}`);
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Caso descontado correctamente',
+                casos_restantes: controlActivo.co_cantidad,
+                tiene_casos: controlActivo.co_cantidad > 0
+            }
+        });
+
+    } catch (err) {
+        console.error('Error en /api/hojas-vida/validar-descontar-caso:', err);
+        return res.status(500).json({ error: 1, response: { mensaje: 'Error interno del servidor' } });
+    }
+});
+
 router.put('/agendar', async (req, res) => {
     try {
 

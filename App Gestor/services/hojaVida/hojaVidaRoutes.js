@@ -644,47 +644,15 @@ router.put('/agendar', async (req, res) => {
             return res.status(400).json({ error: 1, response: { mensaje: 'Todos los campos son requeridos: hojaVidaId, fecha_hora, examenes, recomendaciones, usuario_id, ips_id' } });
         }
 
-        // Validar control de uso de IPS del usuario
-        const controlActivo = await ControlUsoIps.findOne({
-            id_usuario: usuario_id,
-            co_estado: true
-        });
-
-        if (!controlActivo) {
-            return res.status(403).json({
-                error: 1,
-                response: {
-                    mensaje: 'No tiene casos disponibles. Por favor, comuníquese con el administrador para obtener más casos.'
-                }
-            });
-        }
-
-        if (controlActivo.co_cantidad <= 0) {
-            return res.status(403).json({
-                error: 1,
-                response: {
-                    mensaje: 'No tiene casos disponibles. Por favor, comuníquese con el administrador para obtener más casos.',
-                    casos_disponibles: 0
-                }
-            });
-        }
-
-
         const ips = await IPS.findById(ips_id);
         if (!ips) {
             return res.status(404).json({ error: 1, response: { mensaje: `No se encontró la IPS con id '${ips_id}'` } });
         }
 
-
         const fechaHoraDate = new Date(fecha_hora);
         if (isNaN(fechaHoraDate.getTime())) {
             return res.status(400).json({ error: 1, response: { mensaje: 'Formato de fecha_hora inválido. Use formato ISO: YYYY-MM-DDTHH:mm' } });
         }
-
-        // Actualizar el control de uso - restar 1 caso
-        controlActivo.co_cantidad = controlActivo.co_cantidad - 1;
-        await controlActivo.save();
-        console.log(`[/agendar] Caso consumido. Usuario: ${usuario_id}, Casos restantes: ${controlActivo.co_cantidad}`);
 
         const hojaActualizada = await HojaVida.findByIdAndUpdate(
             hojaVidaId,
@@ -707,8 +675,7 @@ router.put('/agendar', async (req, res) => {
             error: 0,
             response: {
                 mensaje: 'Agendamiento actualizado correctamente',
-                id: hojaActualizada._id,
-                casos_restantes: controlActivo.co_cantidad
+                id: hojaActualizada._id
             }
         });
 

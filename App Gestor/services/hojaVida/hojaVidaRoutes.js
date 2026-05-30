@@ -4,6 +4,7 @@ const HojaVida = require('../server/models/hojaVida/hojaVida');
 const User = require('../server/models/user/user');
 const IPS = require('../server/models/ips/ips');
 const Permiso = require('../server/models/permiso/permiso');
+const ControlUsoIps = require('../server/models/controlUsoIps/controlUsoIps');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -133,6 +134,99 @@ router.post('/crear', async (req, res) => {
         });
     } catch (err) {
         console.error('Error en /api/hojas-vida/crear:', err);
+        return res.status(500).json({ error: 1, response: { mensaje: 'Error interno del servidor' } });
+    }
+});
+
+router.put('/actualizar/:id', async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token requerido' } });
+        }
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({ error: 1, response: { mensaje: 'Servidor sin JWT_SECRET configurado' } });
+        }
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
+        }
+
+        // Obtener ID desde params de la URL
+        const { id } = req.params;
+        const datosActualizar = req.body;
+
+        if (!id) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'El ID es obligatorio' } });
+        }
+
+        // Validar que el ID sea válido
+        if (id.length !== 24) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'ID inválido' } });
+        }
+
+        // Verificar que el registro existe
+        const hojaVidaExistente = await HojaVida.findById(id);
+        if (!hojaVidaExistente) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'No se encontró la hoja de vida con el ID proporcionado' } });
+        }
+
+        // Si se está actualizando el DOCUMENTO, verificar que no exista otro registro con ese documento
+        if (datosActualizar.DOCUMENTO && datosActualizar.DOCUMENTO !== hojaVidaExistente.DOCUMENTO) {
+            const documentoExiste = await HojaVida.findOne({
+                DOCUMENTO: datosActualizar.DOCUMENTO,
+                _id: { $ne: id }
+            });
+
+            if (documentoExiste) {
+                return res.status(409).json({
+                    error: 1,
+                    response: {
+                        mensaje: 'El documento ya está registrado en otra hoja de vida',
+                        documento_existente: {
+                            documento: documentoExiste.DOCUMENTO,
+                            nombre: `${documentoExiste.NOMBRE || ''} ${documentoExiste.PRIMER_APELLIDO || ''}`.trim()
+                        }
+                    }
+                });
+            }
+        }
+
+        // Manejar campos especiales con valores por defecto
+        if (datosActualizar.ESTADO_NOTIFICACION === undefined) {
+            datosActualizar.ESTADO_NOTIFICACION = hojaVidaExistente.ESTADO_NOTIFICACION;
+        }
+        if (datosActualizar.H_ESTADO_NOTIFICACION_CONSENTIMIENTO === undefined) {
+            datosActualizar.H_ESTADO_NOTIFICACION_CONSENTIMIENTO = hojaVidaExistente.H_ESTADO_NOTIFICACION_CONSENTIMIENTO;
+        }
+
+        // Actualizar el registro
+        const hojaVidaActualizada = await HojaVida.findByIdAndUpdate(
+            id,
+            datosActualizar,
+            { new: true, runValidators: true }
+        );
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Hoja de vida actualizada exitosamente',
+                hoja_vida: {
+                    id: hojaVidaActualizada._id,
+                    DOCUMENTO: hojaVidaActualizada.DOCUMENTO,
+                    NOMBRE: hojaVidaActualizada.NOMBRE,
+                    PRIMER_APELLIDO: hojaVidaActualizada.PRIMER_APELLIDO,
+                    SEGUNDO_APELLIDO: hojaVidaActualizada.SEGUNDO_APELLIDO,
+                    CORREO: hojaVidaActualizada.CORREO,
+                    CELULAR: hojaVidaActualizada.CELULAR
+                }
+            }
+        });
+    } catch (err) {
+        console.error('Error en /api/hojas-vida/actualizar:', err);
         return res.status(500).json({ error: 1, response: { mensaje: 'Error interno del servidor' } });
     }
 });
@@ -526,6 +620,75 @@ router.post('/por_documento', async (req, res) => {
     }
 });
 
+router.post('/validar-descontar-caso', async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token requerido' } });
+        }
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({ error: 1, response: { mensaje: 'Servidor sin JWT_SECRET configurado' } });
+        }
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
+        }
+
+        const { usuario_id } = req.body;
+
+        if (!usuario_id) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'El campo usuario_id es requerido' } });
+        }
+
+        // Validar control de uso de IPS del usuario
+        const controlActivo = await ControlUsoIps.findOne({
+            id_usuario: usuario_id,
+            co_estado: true
+        });
+
+        if (!controlActivo) {
+            return res.status(403).json({
+                error: 1,
+                response: {
+                    mensaje: 'No tiene casos disponibles. Por favor, comuníquese con el administrador para obtener más casos.',
+                    casos_disponibles: 0
+                }
+            });
+        }
+
+        if (controlActivo.co_cantidad <= 0) {
+            return res.status(403).json({
+                error: 1,
+                response: {
+                    mensaje: 'No tiene casos disponibles. Por favor, comuníquese con el administrador para obtener más casos.',
+                    casos_disponibles: 0
+                }
+            });
+        }
+
+        // Descontar 1 caso
+        controlActivo.co_cantidad = controlActivo.co_cantidad - 1;
+        await controlActivo.save();
+        console.log(`[/validar-descontar-caso] Caso consumido. Usuario: ${usuario_id}, Casos restantes: ${controlActivo.co_cantidad}`);
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Caso descontado correctamente',
+                casos_restantes: controlActivo.co_cantidad,
+                tiene_casos: controlActivo.co_cantidad > 0
+            }
+        });
+
+    } catch (err) {
+        console.error('Error en /api/hojas-vida/validar-descontar-caso:', err);
+        return res.status(500).json({ error: 1, response: { mensaje: 'Error interno del servidor' } });
+    }
+});
+
 router.put('/agendar', async (req, res) => {
     try {
 
@@ -550,13 +713,11 @@ router.put('/agendar', async (req, res) => {
             return res.status(400).json({ error: 1, response: { mensaje: 'Todos los campos son requeridos: hojaVidaId, fecha_hora, examenes, recomendaciones, usuario_id, ips_id' } });
         }
 
-        
         const ips = await IPS.findById(ips_id);
         if (!ips) {
             return res.status(404).json({ error: 1, response: { mensaje: `No se encontró la IPS con id '${ips_id}'` } });
         }
 
-        
         const fechaHoraDate = new Date(fecha_hora);
         if (isNaN(fechaHoraDate.getTime())) {
             return res.status(400).json({ error: 1, response: { mensaje: 'Formato de fecha_hora inválido. Use formato ISO: YYYY-MM-DDTHH:mm' } });
@@ -1004,7 +1165,7 @@ router.post('/caso_disponible', async (req, res) => {
 
 router.get('/sin_usuario_sic', async (req, res) => {
     try {
-
+        
         const authHeader = req.headers['authorization'] || req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({
@@ -1032,7 +1193,7 @@ router.get('/sin_usuario_sic', async (req, res) => {
             });
         }
 
-
+       
         const registros = await HojaVida.find({
             $or: [
                 { USUARIO_SIC: null },
@@ -1050,7 +1211,7 @@ router.get('/sin_usuario_sic', async (req, res) => {
             });
         }
 
-
+       
         return res.status(200).json({
             error: 0,
             response: {
@@ -1062,61 +1223,6 @@ router.get('/sin_usuario_sic', async (req, res) => {
 
     } catch (err) {
         console.error('Error en /api/hoja_vida/sin_usuario_sic:', err);
-        return res.status(500).json({
-            error: 1,
-            response: { mensaje: 'Error inesperado' }
-        });
-    }
-});
-
-router.get('/con_usuario_sic', async (req, res) => {
-    try {
-        const authHeader = req.headers['authorization'] || req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({
-                error: 1,
-                response: { mensaje: 'Token requerido' }
-            });
-        }
-
-        const token = authHeader.substring(7);
-        const secret = process.env.JWT_SECRET;
-
-        if (!secret) {
-            return res.status(500).json({
-                error: 1,
-                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
-            });
-        }
-
-        try {
-            jwt.verify(token, secret);
-        } catch (e) {
-            return res.status(401).json({
-                error: 1,
-                response: { mensaje: 'Token inválido o expirado' }
-            });
-        }
-
-        const hojasVida = await HojaVida
-            .find({
-                USUARIO_SIC: { $exists: true, $ne: null, $ne: "" }
-            })
-            .populate('IPS_ID')
-            .populate('USUARIO_ID')
-            .lean();
-
-        return res.status(200).json({
-            error: 0,
-            response: {
-                mensaje: 'Consulta exitosa - Hojas de vida con USUARIO_SIC asignado',
-                data: hojasVida,
-                total: hojasVida.length
-            }
-        });
-
-    } catch (err) {
-        console.error('Error en /api/hojas-vida/con_usuario_sic:', err);
         return res.status(500).json({
             error: 1,
             response: { mensaje: 'Error inesperado' }
@@ -1725,6 +1831,362 @@ router.get('/biometria/info/:aspiranteId', async (req, res) => {
     }
 });
 
+router.put('/upload_psicologia/', upload.single('pdf'), async (req, res) => {
+    try {
+
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        let payload;
+
+        try {
+            payload = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+
+        const { id_aspirante, id_usuario } = req.body;
+
+        if (!id_aspirante || !id_usuario || !req.file) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: "Faltan parámetros (id_aspirante, id_usuario, pdf)" }
+            });
+        }
+
+
+        const registro = await HojaVida.findById(id_aspirante);
+        if (!registro) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: "Aspirante no encontrado" }
+            });
+        }
+
+
+        const nombreArchivo = `${id_aspirante}_${Date.now()}.pdf`;
+        const rutaRelativa = `psicologia/${nombreArchivo}`;
+        const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+
+        const dir = path.dirname(rutaAbsoluta);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+
+        if (registro.RUTA_PSICOLOGIA && registro.RUTA_PSICOLOGIA.ruta) {
+            const oldPath = path.join(__dirname, '../../storage', registro.RUTA_PSICOLOGIA.ruta);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        }
+
+
+        fs.writeFileSync(rutaAbsoluta, req.file.buffer);
+
+
+        registro.RUTA_PSICOLOGIA = {
+            ruta: rutaRelativa,
+            id_usuario,
+            fecha: new Date()
+        };
+
+        await registro.save();
+
+        return res.json({
+            error: 0,
+            response: {
+                mensaje: "PDF de psicología cargado exitosamente",
+                id_aspirante: id_aspirante,
+                psicologia: registro.RUTA_PSICOLOGIA
+            }
+        });
+
+    } catch (error) {
+        console.error("Error inesperado:", error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: "Error inesperado",
+                detalle: error.message
+            }
+        });
+    }
+});
+
+router.get('/psicologia/descargar/:aspiranteId', async (req, res) => {
+    try {
+
+        const authHeader = req.headers['authorization'];
+
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+
+        let payload;
+        try {
+            payload = jwt.verify(token, secret);
+        } catch (err) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+
+        const { aspiranteId } = req.params;
+
+
+        const registro = await HojaVida.findById(aspiranteId);
+
+        if (!registro) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Aspirante no encontrado' }
+            });
+        }
+
+
+        if (
+            !registro.RUTA_PSICOLOGIA ||
+            !registro.RUTA_PSICOLOGIA.ruta ||
+            registro.RUTA_PSICOLOGIA.ruta.trim() === ''
+        ) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'El aspirante no tiene PDF de psicología cargado' }
+            });
+        }
+
+
+        const rutaRelativa = registro.RUTA_PSICOLOGIA.ruta;
+        const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+
+
+        if (!fs.existsSync(rutaAbsoluta)) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'El archivo de psicología no existe en el servidor' }
+            });
+        }
+
+
+        return res.download(rutaAbsoluta, `psicologia_${aspiranteId}.pdf`);
+
+    } catch (error) {
+        console.error('Error inesperado:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error inesperado',
+                detalle: error.message
+            }
+        });
+    }
+});
+
+router.put('/cierre/gestionar', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        // Obtener datos del body
+        const {
+            id_hoja_vida,
+            id_usuario_gestor_cierre,
+            estado_cierre,
+            notas_cierre,
+            tipo_cierre
+        } = req.body;
+
+        // Validar campos obligatorios
+        if (!id_hoja_vida) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_hoja_vida es obligatorio' }
+            });
+        }
+
+        if (!id_usuario_gestor_cierre) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_usuario_gestor_cierre es obligatorio' }
+            });
+        }
+
+        // Verificar que la hoja de vida existe
+        const hojaVida = await HojaVida.findById(id_hoja_vida);
+        if (!hojaVida) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Hoja de vida no encontrada' }
+            });
+        }
+
+        // Verificar que el usuario gestor existe
+        const usuarioGestor = await User.findById(id_usuario_gestor_cierre);
+        if (!usuarioGestor) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Usuario gestor no encontrado' }
+            });
+        }
+
+        // Actualizar los campos de cierre
+        hojaVida.USUARIO_GESTOR_CIERRE = id_usuario_gestor_cierre;
+        hojaVida.ESTADO_CIERRE = estado_cierre || null;
+        hojaVida.NOTAS_CIERRE = notas_cierre || null;
+        hojaVida.TIPO_CIERRE = tipo_cierre || null;
+        hojaVida.FECHA_CIERRE = new Date();
+
+        await hojaVida.save();
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Cierre gestionado exitosamente',
+                datos: {
+                    id_hoja_vida: hojaVida._id,
+                    usuario_gestor: usuarioGestor.NOMBRE,
+                    estado_cierre: hojaVida.ESTADO_CIERRE,
+                    tipo_cierre: hojaVida.TIPO_CIERRE,
+                    fecha_cierre: hojaVida.FECHA_CIERRE
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en /cierre/gestionar:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error inesperado',
+                detalle: error.message
+            }
+        });
+    }
+});
+
+router.post('/casos/retorno-ips', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        // Obtener id_ips del body
+        const { id_ips } = req.body;
+
+        if (!id_ips) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El id_ips es obligatorio' }
+            });
+        }
+
+        // Verificar que la IPS existe
+        const ips = await IPS.findById(id_ips).lean();
+        if (!ips) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'IPS no encontrada' }
+            });
+        }
+
+        // Buscar hojas de vida con los filtros
+        const hojasVida = await HojaVida.find({
+            TIPO_CIERRE: 'Retorno Ips',
+            IPS_ID: id_ips
+        })
+        .populate('IPS_ID', 'NOMBRE_IPS NIT CORREO TELEFONO DIRECCION CIUDAD DEPARTAMENTO REGIONAL')
+        .populate('USUARIO_ID', 'NOMBRE CORREO TELEFONO ROL')
+        .populate('USUARIO_GESTOR_CIERRE', 'NOMBRE CORREO TELEFONO ROL')
+        .populate('RUTA_BIOMETRIA.id_usuario', 'NOMBRE CORREO')
+        .populate('RUTA_PSICOLOGIA.id_usuario', 'NOMBRE CORREO')
+        .lean();
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: `Casos de retorno IPS encontrados: ${hojasVida.length}`,
+                total: hojasVida.length,
+                ips: {
+                    id: ips._id,
+                    nombre: ips.NOMBRE_IPS
+                },
+                casos: hojasVida
+            }
+        });
+
+    } catch (error) {
+        console.error('Error en /casos/retorno-ips:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error inesperado',
+                detalle: error.message
+            }
+        });
+    }
+});
 
 
 module.exports = router;

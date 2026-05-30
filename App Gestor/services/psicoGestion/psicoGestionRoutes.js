@@ -122,4 +122,107 @@ router.post('/liberar-caso', async (req, res) => {
     }
 });
 
+router.post('/asignar-caso', async (req, res) => {
+    try {
+        // Validar token de autorización
+        const authHeader = req.headers['authorization'];
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        try {
+            jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        // Extraer datos del request
+        const { caso_id, psicologo_id, supervisor_id } = req.body;
+
+        // Validar parámetros requeridos
+        if (!caso_id || !psicologo_id || !supervisor_id) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'Faltan parámetros requeridos: caso_id, psicologo_id, supervisor_id' }
+            });
+        }
+
+        // Validar que caso_id sea un ObjectId válido
+        if (!mongoose.Types.ObjectId.isValid(caso_id)) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El caso_id no es válido' }
+            });
+        }
+
+        // Validar que psicologo_id sea un ObjectId válido
+        if (!mongoose.Types.ObjectId.isValid(psicologo_id)) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El psicologo_id no es válido' }
+            });
+        }
+
+        // Validar que supervisor_id sea un ObjectId válido
+        if (!mongoose.Types.ObjectId.isValid(supervisor_id)) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El supervisor_id no es válido' }
+            });
+        }
+
+        // Buscar el caso en la base de datos
+        const caso = await HojaVida.findByIdAndUpdate(
+            caso_id,
+            {
+                USUARIO_SIC: psicologo_id,
+                ESTADO_NOTIFICACION: "TOMADO POR PSICOLOGIA"
+            },
+            { new: true, runValidators: true }
+        );
+
+        if (!caso) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'No se encontró el caso' }
+            });
+        }
+
+        // Respuesta exitosa
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Psicólogo asignado correctamente',
+                data: {
+                    caso_id: caso._id,
+                    psicologo_id: psicologo_id
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error('Error en /api/psicologia-gestion/asignar-caso:', err);
+        return res.status(500).json({
+            error: 1,
+            response: { mensaje: 'Error interno del servidor' }
+        });
+    }
+});
+
 module.exports = router;

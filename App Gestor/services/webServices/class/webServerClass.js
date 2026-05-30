@@ -11,7 +11,8 @@ const pdf = require('../../pdf/pdf');
 const ipsRoutes = require('../../ipsRoutes/ipsRoutes');
 const notificaciones = require('../../notificaciones/notificaciones');
 const preguntasPsicologia = require('../../psicologia/preguntas');
-const controlUsoIpsRoutes = require('../../controlUsoIps/controlUsoIpsRoutes');
+const ipsGestionRoutes = require('../../ipsGestion/ipsGestionRoutes');
+const psicoGestionRoutes = require('../../psicoGestion/psicoGestionRoutes');
 
 class WebServer {
     constructor(port) {
@@ -25,9 +26,7 @@ class WebServer {
         const corsOptions = {
             origin: [
                 'http://localhost:4200',
-                'http://3.142.186.227:4200',
-                'https://redcemed.com',
-                'http://redcemed.com'
+                'http://3.142.186.227:4200'
             ],
             credentials: true,
             methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -65,7 +64,8 @@ class WebServer {
         this.app.use('/api/estado_caso', pdf);
         this.app.use('/api/notificaciones', notificaciones);
         this.app.use('/api/preguntas_psicologia', preguntasPsicologia);
-        this.app.use('/api/control-uso-ips', controlUsoIpsRoutes);
+        this.app.use('/api/ips-gestion', ipsGestionRoutes);
+        this.app.use('/api/psico-gestion', psicoGestionRoutes);
     }
 
     /* _userAuthentication() {

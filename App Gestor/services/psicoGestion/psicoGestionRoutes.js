@@ -1,7 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const HojaVida = require('../server/models/hojaVida/hojaVida');
-const ControlUsoIps = require('../server/models/controlUsoIps/controlUsoIps');
 const { mongoose } = require('../server/conection/mongo');
 
 const router = express.Router();
@@ -101,23 +100,6 @@ router.post('/liberar-caso', async (req, res) => {
 
         // Guardar los cambios en el caso
         await caso.save();
-
-        // Buscar el registro de control de uso de IPS
-        const controlUso = await ControlUsoIps.findOne({
-            id_usuario: new mongoose.Types.ObjectId(usuario_id),
-            co_estado: true
-        });
-
-        if (!controlUso) {
-            return res.status(404).json({
-                error: 1,
-                response: { mensaje: 'No se encontró un registro activo para el usuario en control de uso de IPS' }
-            });
-        }
-
-        // Incrementar el contador
-        controlUso.co_cantidad = (controlUso.co_cantidad || 0) + 1;
-        await controlUso.save();
 
         // Respuesta exitosa
         return res.status(200).json({

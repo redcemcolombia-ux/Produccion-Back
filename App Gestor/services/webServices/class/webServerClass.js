@@ -66,7 +66,7 @@ class WebServer {
         this.app.use('/api/notificaciones', notificaciones);
         this.app.use('/api/preguntas_psicologia', preguntasPsicologia);
         this.app.use('/api/ips-gestion', ipsGestionRoutes);
-        this.app.use('/api/psico-gestion', psicoGestionRoutes);
+        this.app.use('/api/psicologia-gestion', psicoGestionRoutes);
         this.app.use('/api/control-uso-ips', controlUsoIpsRoutes);
     }
 

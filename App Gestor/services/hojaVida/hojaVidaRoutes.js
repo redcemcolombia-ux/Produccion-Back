@@ -2373,11 +2373,12 @@ router.put('/actualizacion_examenes', (req, res) => {
 
             // Crear nombre del archivo con el mismo formato que se usa en el sistema
             const nombreArchivo = `hoja_vida_${id_caso}_${Date.now()}.pdf`;
-            const rutaRelativa = `uploads/pdf/${nombreArchivo}`;
-            const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+            const UPLOAD_DIR = path.join(__dirname, '../uploads/pdf');
 
-            const dir = path.dirname(rutaAbsoluta);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            // Asegurar que el directorio existe
+            if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+            const rutaAbsoluta = path.join(UPLOAD_DIR, nombreArchivo);
 
             // NO borramos el archivo anterior porque quedó guardado en el historial
 
@@ -2385,11 +2386,11 @@ router.put('/actualizacion_examenes', (req, res) => {
             fs.writeFileSync(rutaAbsoluta, req.file.buffer);
 
             // Actualizar PDF_URL (campo principal usado en el sistema)
-            registro.PDF_URL = `/${rutaRelativa}`;
+            registro.PDF_URL = `/uploads/pdf/${nombreArchivo}`;
 
             // Actualizar RUTA_EXAMENES con metadata completa
             registro.RUTA_EXAMENES = {
-                ruta: rutaRelativa,
+                ruta: `/uploads/pdf/${nombreArchivo}`,
                 id_usuario: id_usuario,
                 fecha: new Date()
             };

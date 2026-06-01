@@ -2371,9 +2371,9 @@ router.put('/actualizacion_examenes', (req, res) => {
                 });
             }
 
-            // Crear nombre del archivo
-            const nombreArchivo = `${id_caso}_${Date.now()}.pdf`;
-            const rutaRelativa = `examenes/${nombreArchivo}`;
+            // Crear nombre del archivo con el mismo formato que se usa en el sistema
+            const nombreArchivo = `hoja_vida_${id_caso}_${Date.now()}.pdf`;
+            const rutaRelativa = `uploads/pdf/${nombreArchivo}`;
             const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
 
             const dir = path.dirname(rutaAbsoluta);

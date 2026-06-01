@@ -2353,18 +2353,18 @@ router.put('/actualizacion_examenes', (req, res) => {
                 });
             }
 
-            // Guardar en historial si existe información previa
-            if (registro.RUTA_EXAMENES && registro.RUTA_EXAMENES.ruta) {
+            // Guardar en historial si existe información previa de PDF_URL
+            if (registro.PDF_URL && registro.PDF_URL.trim() !== '') {
                 // Inicializar historial si no existe
                 if (!registro.HISTORIAL_EXAMENES) {
                     registro.HISTORIAL_EXAMENES = [];
                 }
 
-                // Agregar al historial
+                // Agregar al historial con la info del PDF anterior
                 registro.HISTORIAL_EXAMENES.push({
-                    id_usuario_original: registro.RUTA_EXAMENES.id_usuario,
-                    ruta_anterior: registro.RUTA_EXAMENES.ruta,
-                    fecha_anterior: registro.RUTA_EXAMENES.fecha,
+                    id_usuario_original: registro.RUTA_EXAMENES?.id_usuario || null,
+                    ruta_anterior: registro.PDF_URL,
+                    fecha_anterior: registro.RUTA_EXAMENES?.fecha || null,
                     fecha_cambio: new Date(),
                     notas_cambio: notas_cambio.trim(),
                     id_usuario_cambio: id_usuario
@@ -2384,7 +2384,10 @@ router.put('/actualizacion_examenes', (req, res) => {
             // Guardar el nuevo archivo
             fs.writeFileSync(rutaAbsoluta, req.file.buffer);
 
-            // Actualizar campos actuales
+            // Actualizar PDF_URL (campo principal usado en el sistema)
+            registro.PDF_URL = `/${rutaRelativa}`;
+
+            // Actualizar RUTA_EXAMENES con metadata completa
             registro.RUTA_EXAMENES = {
                 ruta: rutaRelativa,
                 id_usuario: id_usuario,
@@ -2398,7 +2401,8 @@ router.put('/actualizacion_examenes', (req, res) => {
                 response: {
                     mensaje: "Exámenes actualizados exitosamente",
                     id_caso: id_caso,
-                    examenes_actuales: registro.RUTA_EXAMENES,
+                    pdf_url: registro.PDF_URL,
+                    examenes_metadata: registro.RUTA_EXAMENES,
                     total_historial: registro.HISTORIAL_EXAMENES ? registro.HISTORIAL_EXAMENES.length : 0
                 }
             });

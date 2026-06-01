@@ -56,6 +56,19 @@ const hojaVidaSchema = new mongoose.Schema(
             id_usuario: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
             fecha: { type: Date, default: null }
         },
+        RUTA_EXAMENES: {
+            ruta: { type: String, default: null },
+            id_usuario: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            fecha: { type: Date, default: null }
+        },
+        HISTORIAL_EXAMENES: [{
+            id_usuario_original: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            ruta_anterior: { type: String },
+            fecha_anterior: { type: Date },
+            fecha_cambio: { type: Date, default: Date.now },
+            notas_cambio: { type: String },
+            id_usuario_cambio: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+        }],
         INFO_LIBERACION: [{
             caso_id: { type: String },
             informe_liberacion: { type: String },

@@ -1741,6 +1741,177 @@ router.put('/biometria/subir', upload.single('pdf'), async (req, res) => {
     }
 });
 
+router.put('/actualizacion_biometria', (req, res) => {
+    upload.single('pdf')(req, res, async (err) => {
+        // Manejo de errores de Multer
+        if (err) {
+            if (err instanceof multer.MulterError) {
+                if (err.code === 'LIMIT_FILE_SIZE') {
+                    return res.status(400).json({
+                        error: 1,
+                        response: {
+                            mensaje: 'El archivo excede el tamaño máximo permitido de 150 MB',
+                            codigo: 'LIMIT_FILE_SIZE'
+                        }
+                    });
+                }
+                return res.status(400).json({
+                    error: 1,
+                    response: {
+                        mensaje: `Error al subir archivo: ${err.message}`,
+                        codigo: err.code
+                    }
+                });
+            }
+
+            if (err.message === 'Solo se permiten archivos PDF') {
+                return res.status(400).json({
+                    error: 1,
+                    response: { mensaje: 'Solo se permiten archivos PDF' }
+                });
+            }
+
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Error al procesar el archivo', detalle: err.message }
+            });
+        }
+
+        try {
+            // Validar token
+            const authHeader = req.headers['authorization'];
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({
+                    error: 1,
+                    response: { mensaje: 'Token requerido' }
+                });
+            }
+
+            const token = authHeader.substring(7);
+            let payload;
+
+            try {
+                payload = jwt.verify(token, process.env.JWT_SECRET);
+            } catch (e) {
+                return res.status(401).json({
+                    error: 1,
+                    response: { mensaje: 'Token inválido o expirado' }
+                });
+            }
+
+            // Obtener parámetros
+            const { id_caso, id_usuario, notas_cambio } = req.body;
+
+            if (!id_caso || !id_usuario || !req.file) {
+                return res.status(400).json({
+                    error: 1,
+                    response: { mensaje: "Faltan parámetros (id_caso, id_usuario, pdf)" }
+                });
+            }
+
+            if (!notas_cambio || notas_cambio.trim() === '') {
+                return res.status(400).json({
+                    error: 1,
+                    response: { mensaje: "Las notas_cambio son obligatorias" }
+                });
+            }
+
+            // Validar formato de IDs
+            if (id_caso.length !== 24) {
+                return res.status(400).json({
+                    error: 1,
+                    response: { mensaje: "Formato de id_caso inválido" }
+                });
+            }
+
+            if (id_usuario.length !== 24) {
+                return res.status(400).json({
+                    error: 1,
+                    response: { mensaje: "Formato de id_usuario inválido" }
+                });
+            }
+
+            // Buscar el caso
+            const registro = await HojaVida.findById(id_caso);
+            if (!registro) {
+                return res.status(404).json({
+                    error: 1,
+                    response: { mensaje: "Caso no encontrado" }
+                });
+            }
+
+            // Verificar que el usuario existe
+            const usuario = await User.findById(id_usuario);
+            if (!usuario) {
+                return res.status(404).json({
+                    error: 1,
+                    response: { mensaje: "Usuario no encontrado" }
+                });
+            }
+
+            // Guardar en historial si existe información previa de RUTA_BIOMETRIA
+            if (registro.RUTA_BIOMETRIA && registro.RUTA_BIOMETRIA.ruta) {
+                // Inicializar historial si no existe
+                if (!registro.HISTORIAL_BIOMETRIA) {
+                    registro.HISTORIAL_BIOMETRIA = [];
+                }
+
+                // Agregar al historial
+                registro.HISTORIAL_BIOMETRIA.push({
+                    id_usuario_original: registro.RUTA_BIOMETRIA.id_usuario,
+                    ruta_anterior: registro.RUTA_BIOMETRIA.ruta,
+                    fecha_anterior: registro.RUTA_BIOMETRIA.fecha,
+                    fecha_cambio: new Date(),
+                    notas_cambio: notas_cambio.trim(),
+                    id_usuario_cambio: id_usuario
+                });
+            }
+
+            // Crear nombre del archivo (mismo formato que servicio original de biometría)
+            const nombreArchivo = `${id_caso}_${Date.now()}.pdf`;
+            const rutaRelativa = `biometria/${nombreArchivo}`;
+            const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+
+            const dir = path.dirname(rutaAbsoluta);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+            // NO borramos el archivo anterior porque quedó guardado en el historial
+
+            // Guardar el nuevo archivo
+            fs.writeFileSync(rutaAbsoluta, req.file.buffer);
+
+            // Actualizar RUTA_BIOMETRIA
+            registro.RUTA_BIOMETRIA = {
+                ruta: rutaRelativa,
+                id_usuario: id_usuario,
+                fecha: new Date()
+            };
+
+            await registro.save();
+
+            return res.json({
+                error: 0,
+                response: {
+                    mensaje: "Biometría actualizada exitosamente",
+                    id_caso: id_caso,
+                    biometria_actual: registro.RUTA_BIOMETRIA,
+                    total_historial: registro.HISTORIAL_BIOMETRIA ? registro.HISTORIAL_BIOMETRIA.length : 0
+                }
+            });
+
+        } catch (error) {
+            console.error("Error inesperado en /actualizacion_biometria:", error);
+            return res.status(500).json({
+                error: 1,
+                response: {
+                    mensaje: "Error inesperado",
+                    detalle: error.message
+                }
+            });
+        }
+    });
+});
+
 router.get('/biometria/descargar/:aspiranteId', async (req, res) => {
     try {
         

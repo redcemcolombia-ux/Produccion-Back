@@ -139,31 +139,72 @@ router.post('/escalar', (req, res) => {
 
             // Guardar imagen si se envió
             if (req.file) {
-                const timestamp = Date.now();
-                const extension = req.file.mimetype === 'image/png' ? 'png' : 'jpg';
-                const nombreArchivo = `${usuario_id}_${timestamp}.${extension}`;
-                const rutaRelativa = `escalamientos/${nombreArchivo}`;
-                const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+                console.log('[POST /escalar] 📸 Procesando imagen...');
+                console.log('[POST /escalar] - Tamaño:', req.file.size, 'bytes');
+                console.log('[POST /escalar] - Tipo:', req.file.mimetype);
+                console.log('[POST /escalar] - Nombre original:', req.file.originalname);
 
-                // Crear directorio si no existe
-                const dir = path.dirname(rutaAbsoluta);
-                if (!fs.existsSync(dir)) {
-                    fs.mkdirSync(dir, { recursive: true });
+                try {
+                    const timestamp = Date.now();
+                    const extension = req.file.mimetype === 'image/png' ? 'png' : 'jpg';
+                    const nombreArchivo = `${usuario_id}_${timestamp}.${extension}`;
+                    const rutaRelativa = `escalamientos/${nombreArchivo}`;
+                    const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+
+                    console.log('[POST /escalar] 📁 Ruta absoluta:', rutaAbsoluta);
+
+                    // Crear directorio si no existe
+                    const dir = path.dirname(rutaAbsoluta);
+                    if (!fs.existsSync(dir)) {
+                        console.log('[POST /escalar] 📂 Creando directorio:', dir);
+                        fs.mkdirSync(dir, { recursive: true });
+                        console.log('[POST /escalar] ✅ Directorio creado exitosamente');
+                    } else {
+                        console.log('[POST /escalar] ✅ Directorio ya existe');
+                    }
+
+                    // Guardar archivo
+                    console.log('[POST /escalar] 💾 Guardando archivo...');
+                    fs.writeFileSync(rutaAbsoluta, req.file.buffer);
+                    console.log('[POST /escalar] ✅ Archivo guardado exitosamente');
+
+                    // Verificar que el archivo existe
+                    if (fs.existsSync(rutaAbsoluta)) {
+                        const stats = fs.statSync(rutaAbsoluta);
+                        console.log('[POST /escalar] ✅ Verificación: Archivo existe');
+                        console.log('[POST /escalar] - Tamaño en disco:', stats.size, 'bytes');
+                    } else {
+                        console.error('[POST /escalar] ❌ ERROR: El archivo NO se guardó correctamente');
+                        throw new Error('No se pudo verificar el guardado del archivo');
+                    }
+
+                    // Agregar información de evidencia
+                    escalamientoData.evidencia = {
+                        ruta: rutaRelativa,
+                        nombre_original: req.file.originalname,
+                        fecha_subida: new Date()
+                    };
+
+                    console.log('[POST /escalar] ✅ Imagen procesada correctamente');
+
+                } catch (fileError) {
+                    console.error('[POST /escalar] ❌ Error al guardar imagen:', fileError);
+                    return res.status(500).json({
+                        error: 1,
+                        response: {
+                            mensaje: 'Error al guardar la imagen en el servidor',
+                            detalle: fileError.message
+                        }
+                    });
                 }
-
-                // Guardar archivo
-                fs.writeFileSync(rutaAbsoluta, req.file.buffer);
-
-                // Agregar información de evidencia
-                escalamientoData.evidencia = {
-                    ruta: rutaRelativa,
-                    nombre_original: req.file.originalname,
-                    fecha_subida: new Date()
-                };
+            } else {
+                console.log('[POST /escalar] ℹ️ No se envió imagen de evidencia');
             }
 
             // Crear el escalamiento
+            console.log('[POST /escalar] 💾 Guardando en base de datos...');
             const nuevoEscalamiento = await Escalamiento.create(escalamientoData);
+            console.log('[POST /escalar] ✅ Escalamiento creado:', nuevoEscalamiento._id);
 
             return res.status(201).json({
                 error: 0,
@@ -178,7 +219,7 @@ router.post('/escalar', (req, res) => {
                         evidencia: nuevoEscalamiento.evidencia.ruta ? {
                             ruta: nuevoEscalamiento.evidencia.ruta,
                             nombre_original: nuevoEscalamiento.evidencia.nombre_original,
-                            url: `https://redcemed.com/storage/${nuevoEscalamiento.evidencia.ruta}`
+                            url: `https://redcemed.com/api/mesa-ayuda/evidencia/${nuevoEscalamiento._id}`
                         } : null,
                         fecha_creacion: nuevoEscalamiento.createdAt
                     }
@@ -186,7 +227,7 @@ router.post('/escalar', (req, res) => {
             });
 
         } catch (error) {
-            console.error('Error en /api/mesa-ayuda/escalar:', error);
+            console.error('[POST /escalar] ❌ Error general:', error);
             return res.status(500).json({
                 error: 1,
                 response: {
@@ -257,7 +298,7 @@ router.get('/escalamientos', async (req, res) => {
         const escalamientosConUrl = escalamientos.map(esc => ({
             ...esc,
             evidencia_url: esc.evidencia?.ruta
-                ? `https://redcemed.com/storage/${esc.evidencia.ruta}`
+                ? `https://redcemed.com/api/mesa-ayuda/evidencia/${esc._id}`
                 : null
         }));
 
@@ -271,7 +312,7 @@ router.get('/escalamientos', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error en /api/mesa-ayuda/escalamientos:', error);
+        console.error('[GET /escalamientos] ❌ Error:', error);
         return res.status(500).json({
             error: 1,
             response: {
@@ -328,18 +369,25 @@ router.get('/evidencia/:escalamientoId', async (req, res) => {
             });
         }
 
+        console.log('[GET /evidencia] 🔍 Buscando escalamiento:', escalamientoId);
+
         // Buscar el escalamiento
         const escalamiento = await Escalamiento.findById(escalamientoId);
 
         if (!escalamiento) {
+            console.log('[GET /evidencia] ❌ Escalamiento no encontrado');
             return res.status(404).json({
                 error: 1,
                 response: { mensaje: 'Escalamiento no encontrado' }
             });
         }
 
+        console.log('[GET /evidencia] ✅ Escalamiento encontrado');
+        console.log('[GET /evidencia] - Evidencia ruta:', escalamiento.evidencia?.ruta);
+
         // Verificar si tiene evidencia
         if (!escalamiento.evidencia || !escalamiento.evidencia.ruta || escalamiento.evidencia.ruta.trim() === '') {
+            console.log('[GET /evidencia] ❌ El escalamiento no tiene evidencia adjunta');
             return res.status(404).json({
                 error: 1,
                 response: { mensaje: 'El escalamiento no tiene evidencia adjunta' }
@@ -350,13 +398,36 @@ router.get('/evidencia/:escalamientoId', async (req, res) => {
         const rutaRelativa = escalamiento.evidencia.ruta;
         const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
 
+        console.log('[GET /evidencia] 📁 Ruta absoluta:', rutaAbsoluta);
+        console.log('[GET /evidencia] 🔍 Verificando existencia del archivo...');
+
         // Verificar si el archivo existe
         if (!fs.existsSync(rutaAbsoluta)) {
+            console.log('[GET /evidencia] ❌ El archivo NO existe en el servidor');
+            console.log('[GET /evidencia] 📂 Contenido del directorio storage:');
+
+            try {
+                const storageDir = path.join(__dirname, '../../storage');
+                if (fs.existsSync(storageDir)) {
+                    const files = fs.readdirSync(storageDir, { recursive: true });
+                    console.log('[GET /evidencia] - Archivos en storage:', files);
+                } else {
+                    console.log('[GET /evidencia] - Directorio storage NO existe');
+                }
+            } catch (dirError) {
+                console.log('[GET /evidencia] - Error al leer directorio:', dirError.message);
+            }
+
             return res.status(404).json({
                 error: 1,
-                response: { mensaje: 'El archivo de evidencia no existe en el servidor' }
+                response: {
+                    mensaje: 'El archivo de evidencia no existe en el servidor',
+                    ruta_esperada: rutaRelativa
+                }
             });
         }
+
+        console.log('[GET /evidencia] ✅ Archivo encontrado');
 
         // Determinar el tipo MIME basado en la extensión
         const extension = path.extname(rutaAbsoluta).toLowerCase();
@@ -368,14 +439,17 @@ router.get('/evidencia/:escalamientoId', async (req, res) => {
             mimeType = 'image/jpeg';
         }
 
+        console.log('[GET /evidencia] 📤 Enviando archivo, tipo:', mimeType);
+
         // Enviar el archivo
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Disposition', `inline; filename="${escalamiento.evidencia.nombre_original || 'evidencia' + extension}"`);
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache por 1 día
 
         return res.sendFile(rutaAbsoluta);
 
     } catch (error) {
-        console.error('Error en /api/mesa-ayuda/evidencia/:escalamientoId:', error);
+        console.error('[GET /evidencia] ❌ Error:', error);
         return res.status(500).json({
             error: 1,
             response: {

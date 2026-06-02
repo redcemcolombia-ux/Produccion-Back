@@ -177,7 +177,8 @@ router.post('/escalar', (req, res) => {
                         usuario_id: nuevoEscalamiento.usuario_id,
                         evidencia: nuevoEscalamiento.evidencia.ruta ? {
                             ruta: nuevoEscalamiento.evidencia.ruta,
-                            nombre_original: nuevoEscalamiento.evidencia.nombre_original
+                            nombre_original: nuevoEscalamiento.evidencia.nombre_original,
+                            url: `https://redcemed.com/storage/${nuevoEscalamiento.evidencia.ruta}`
                         } : null,
                         fecha_creacion: nuevoEscalamiento.createdAt
                     }
@@ -252,17 +253,129 @@ router.get('/escalamientos', async (req, res) => {
             });
         }
 
+        // Agregar URL de evidencia a cada escalamiento
+        const escalamientosConUrl = escalamientos.map(esc => ({
+            ...esc,
+            evidencia_url: esc.evidencia?.ruta
+                ? `https://redcemed.com/storage/${esc.evidencia.ruta}`
+                : null
+        }));
+
         return res.status(200).json({
             error: 0,
             response: {
                 mensaje: 'Consulta exitosa',
-                total: escalamientos.length,
-                escalamientos: escalamientos
+                total: escalamientosConUrl.length,
+                escalamientos: escalamientosConUrl
             }
         });
 
     } catch (error) {
         console.error('Error en /api/mesa-ayuda/escalamientos:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error interno del servidor',
+                detalle: error.message
+            }
+        });
+    }
+});
+
+/**
+ * GET /api/mesa-ayuda/evidencia/:escalamientoId
+ * Descarga/visualiza la imagen de evidencia de un escalamiento
+ */
+router.get('/evidencia/:escalamientoId', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        let payload;
+        try {
+            payload = jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        // Obtener escalamientoId de los parámetros
+        const { escalamientoId } = req.params;
+
+        // Validar formato de ID
+        if (!escalamientoId || escalamientoId.length !== 24) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'ID de escalamiento inválido' }
+            });
+        }
+
+        // Buscar el escalamiento
+        const escalamiento = await Escalamiento.findById(escalamientoId);
+
+        if (!escalamiento) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Escalamiento no encontrado' }
+            });
+        }
+
+        // Verificar si tiene evidencia
+        if (!escalamiento.evidencia || !escalamiento.evidencia.ruta || escalamiento.evidencia.ruta.trim() === '') {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'El escalamiento no tiene evidencia adjunta' }
+            });
+        }
+
+        // Construir ruta absoluta del archivo
+        const rutaRelativa = escalamiento.evidencia.ruta;
+        const rutaAbsoluta = path.join(__dirname, '../../storage', rutaRelativa);
+
+        // Verificar si el archivo existe
+        if (!fs.existsSync(rutaAbsoluta)) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'El archivo de evidencia no existe en el servidor' }
+            });
+        }
+
+        // Determinar el tipo MIME basado en la extensión
+        const extension = path.extname(rutaAbsoluta).toLowerCase();
+        let mimeType = 'image/jpeg'; // Por defecto
+
+        if (extension === '.png') {
+            mimeType = 'image/png';
+        } else if (extension === '.jpg' || extension === '.jpeg') {
+            mimeType = 'image/jpeg';
+        }
+
+        // Enviar el archivo
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${escalamiento.evidencia.nombre_original || 'evidencia' + extension}"`);
+
+        return res.sendFile(rutaAbsoluta);
+
+    } catch (error) {
+        console.error('Error en /api/mesa-ayuda/evidencia/:escalamientoId:', error);
         return res.status(500).json({
             error: 1,
             response: {

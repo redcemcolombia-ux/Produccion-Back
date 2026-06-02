@@ -49,6 +49,17 @@ class WebServer {
             }
         }));
 
+        // Servir archivos estáticos de storage (imágenes, PDFs, etc.)
+        const storagePath = require('path').resolve(__dirname, '../../storage');
+        this.app.use('/storage', express.static(storagePath, {
+            setHeaders: (res, filePath) => {
+                const mimeType = mime.lookup(filePath);
+                if (mimeType) {
+                    res.setHeader('Content-Type', mimeType);
+                }
+            }
+        }));
+
         // Endpoint de salud para comprobar la conexión a MongoDB
         this.app.get('/api/health/db', (req, res) => {
             const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];

@@ -41,6 +41,11 @@ const escalamientoSchema = new mongoose.Schema(
         notas_resolucion: {
             type: String,
             default: null
+        },
+        imagen_resolucion: {
+            ruta: { type: String, default: null },
+            nombre_original: { type: String, default: null },
+            fecha_subida: { type: Date, default: null }
         }
     },
     {

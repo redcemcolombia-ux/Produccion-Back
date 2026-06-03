@@ -2631,7 +2631,10 @@ router.put('/notificaciones/marcar-leido', async (req, res) => {
             hoja_vida_id,
             historial_examenes_ids = [],
             info_liberacion_ids = [],
-            historial_biometria_ids = []
+            historial_biometria_ids = [],
+            marcar_leido_ruta_biometria = false,
+            marcar_leido_ruta_psicologia = false,
+            marcar_leido_pdf_url = false
         } = req.body;
 
         console.log('[PUT /notificaciones/marcar-leido] 📝 Datos recibidos:');
@@ -2639,6 +2642,9 @@ router.put('/notificaciones/marcar-leido', async (req, res) => {
         console.log('[PUT /notificaciones/marcar-leido] - historial_examenes_ids:', historial_examenes_ids.length);
         console.log('[PUT /notificaciones/marcar-leido] - info_liberacion_ids:', info_liberacion_ids.length);
         console.log('[PUT /notificaciones/marcar-leido] - historial_biometria_ids:', historial_biometria_ids.length);
+        console.log('[PUT /notificaciones/marcar-leido] - marcar_leido_ruta_biometria:', marcar_leido_ruta_biometria);
+        console.log('[PUT /notificaciones/marcar-leido] - marcar_leido_ruta_psicologia:', marcar_leido_ruta_psicologia);
+        console.log('[PUT /notificaciones/marcar-leido] - marcar_leido_pdf_url:', marcar_leido_pdf_url);
 
         // Validar campo obligatorio
         if (!hoja_vida_id) {
@@ -2673,7 +2679,10 @@ router.put('/notificaciones/marcar-leido', async (req, res) => {
         let actualizados = {
             historial_examenes: 0,
             info_liberacion: 0,
-            historial_biometria: 0
+            historial_biometria: 0,
+            ruta_biometria: false,
+            ruta_psicologia: false,
+            pdf_url: false
         };
 
         // Marcar como leído elementos de HISTORIAL_EXAMENES
@@ -2706,6 +2715,22 @@ router.put('/notificaciones/marcar-leido', async (req, res) => {
             });
         }
 
+        // Marcar como leído campos principales
+        if (marcar_leido_ruta_biometria && hojaVida.RUTA_BIOMETRIA?.ruta) {
+            hojaVida.leido_ruta_biometria = true;
+            actualizados.ruta_biometria = true;
+        }
+
+        if (marcar_leido_ruta_psicologia && hojaVida.RUTA_PSICOLOGIA?.ruta) {
+            hojaVida.leido_ruta_psicologia = true;
+            actualizados.ruta_psicologia = true;
+        }
+
+        if (marcar_leido_pdf_url && hojaVida.PDF_URL) {
+            hojaVida.leido_pdf_url = true;
+            actualizados.pdf_url = true;
+        }
+
         // Guardar cambios
         console.log('[PUT /notificaciones/marcar-leido] 💾 Guardando cambios...');
         await hojaVida.save();
@@ -2720,7 +2745,11 @@ router.put('/notificaciones/marcar-leido', async (req, res) => {
                     historial_examenes: actualizados.historial_examenes,
                     info_liberacion: actualizados.info_liberacion,
                     historial_biometria: actualizados.historial_biometria,
-                    total: actualizados.historial_examenes + actualizados.info_liberacion + actualizados.historial_biometria
+                    ruta_biometria: actualizados.ruta_biometria,
+                    ruta_psicologia: actualizados.ruta_psicologia,
+                    pdf_url: actualizados.pdf_url,
+                    total_arrays: actualizados.historial_examenes + actualizados.info_liberacion + actualizados.historial_biometria,
+                    total_campos: (actualizados.ruta_biometria ? 1 : 0) + (actualizados.ruta_psicologia ? 1 : 0) + (actualizados.pdf_url ? 1 : 0)
                 }
             }
         });
@@ -2772,11 +2801,34 @@ router.get('/notificaciones', async (req, res) => {
             });
         }
 
-        console.log('[GET /notificaciones] 🔔 Consultando registros con HISTORIAL_EXAMENES e INFO_LIBERACION NO LEÍDOS...');
+        console.log('[GET /notificaciones] 🔔 Consultando registros con notificaciones NO LEÍDAS...');
 
-        // Filtrar registros que tengan al menos un elemento NO leído en HISTORIAL_EXAMENES o INFO_LIBERACION
+        // Filtrar registros que tengan al menos una notificación NO leída
         const notificaciones = await HojaVida.find({
             $or: [
+                // Campos principales actualizados y no leídos
+                {
+                    'RUTA_BIOMETRIA.ruta': { $exists: true, $ne: null },
+                    $or: [
+                        { leido_ruta_biometria: { $ne: true } },
+                        { leido_ruta_biometria: { $exists: false } }
+                    ]
+                },
+                {
+                    'RUTA_PSICOLOGIA.ruta': { $exists: true, $ne: null },
+                    $or: [
+                        { leido_ruta_psicologia: { $ne: true } },
+                        { leido_ruta_psicologia: { $exists: false } }
+                    ]
+                },
+                {
+                    PDF_URL: { $exists: true, $ne: null, $ne: '' },
+                    $or: [
+                        { leido_pdf_url: { $ne: true } },
+                        { leido_pdf_url: { $exists: false } }
+                    ]
+                },
+                // Elementos de arrays no leídos
                 {
                     HISTORIAL_EXAMENES: {
                         $elemMatch: {
@@ -2888,14 +2940,32 @@ router.get('/notificaciones', async (req, res) => {
                     );
                 }
 
-                // Agregar contadores de elementos NO leídos
+                // Agregar contadores de elementos NO leídos de arrays
                 resultado.total_historial_examenes = resultado.HISTORIAL_EXAMENES?.length || 0;
                 resultado.total_info_liberacion = resultado.INFO_LIBERACION?.length || 0;
                 resultado.total_historial_biometria = resultado.HISTORIAL_BIOMETRIA?.length || 0;
+
+                // Detectar campos principales actualizados y no leídos
+                resultado.notificaciones_campos = {
+                    tiene_biometria: !!(hv.RUTA_BIOMETRIA?.ruta),
+                    leido_biometria: hv.leido_ruta_biometria === true,
+                    tiene_psicologia: !!(hv.RUTA_PSICOLOGIA?.ruta),
+                    leido_psicologia: hv.leido_ruta_psicologia === true,
+                    tiene_examenes: !!(hv.PDF_URL),
+                    leido_examenes: hv.leido_pdf_url === true
+                };
+
+                // Total de notificaciones no leídas
+                let total_campos_no_leidos = 0;
+                if (resultado.notificaciones_campos.tiene_biometria && !resultado.notificaciones_campos.leido_biometria) total_campos_no_leidos++;
+                if (resultado.notificaciones_campos.tiene_psicologia && !resultado.notificaciones_campos.leido_psicologia) total_campos_no_leidos++;
+                if (resultado.notificaciones_campos.tiene_examenes && !resultado.notificaciones_campos.leido_examenes) total_campos_no_leidos++;
+
                 resultado.total_notificaciones_no_leidas =
                     resultado.total_historial_examenes +
                     resultado.total_info_liberacion +
-                    resultado.total_historial_biometria;
+                    resultado.total_historial_biometria +
+                    total_campos_no_leidos;
 
                 return resultado;
             })

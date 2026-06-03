@@ -96,7 +96,11 @@ const hojaVidaSchema = new mongoose.Schema(
         NOTAS_CIERRE: { type: String, default: null },
         TIPO_CIERRE: { type: String, default: null },
         FECHA_CIERRE: { type: Date, default: null },
-        SEGUNDA_GESTION_IPS: { type: Boolean, default: false }
+        SEGUNDA_GESTION_IPS: { type: Boolean, default: false },
+        // Campos de lectura de notificaciones por campo
+        leido_ruta_biometria: { type: Boolean, default: false },
+        leido_ruta_psicologia: { type: Boolean, default: false },
+        leido_pdf_url: { type: Boolean, default: false }
 
     },
     { timestamps: true, collection: 'cl_hoja_vida' }

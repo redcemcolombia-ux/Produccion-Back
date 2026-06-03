@@ -8,6 +8,8 @@ const hojaVidaSchema = new mongoose.Schema(
         ANNOPERIACAD: { type: Number },
         NUMEPERIACAD: { type: String },
         CODIGO_INSCRIPCION: { type: String },
+        NUMERO_CURSO: { type: String },
+        TIPO_CURSO: { type: String },
         DOCUMENTO: { type: String },
         NOMBRE: { type: String },
         PRIMER_APELLIDO: { type: String },
@@ -20,8 +22,10 @@ const hojaVidaSchema = new mongoose.Schema(
         CELULAR: { type: String },
         DIRECCION: { type: String },
         CIUDAD: { type: String },
+        CIUDAD_NACIMIENTO: { type: String },
         ESTADO: { type: String },
         DEPARTAMENTO: { type: String },
+        DEPARTAMENTO_NACIMIENTO: { type: String },
         REGIONAL: { type: String },
         COMPLEMENTARIA_1: { type: mongoose.Schema.Types.Mixed },
         COMPLEMENTARIA_2: { type: mongoose.Schema.Types.Mixed },
@@ -82,7 +86,14 @@ const hojaVidaSchema = new mongoose.Schema(
             informe_liberacion: { type: String },
             usuario_id: { type: String },
             fecha_liberacion: { type: Date, default: Date.now }
-        }]
+        }],
+        // Campos de cierre de caso
+        USUARIO_GESTOR_CIERRE: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        ESTADO_CIERRE: { type: String, default: null },
+        NOTAS_CIERRE: { type: String, default: null },
+        TIPO_CIERRE: { type: String, default: null },
+        FECHA_CIERRE: { type: Date, default: null },
+        SEGUNDA_GESTION_IPS: { type: Boolean, default: false }
 
     },
     { timestamps: true, collection: 'cl_hoja_vida' }

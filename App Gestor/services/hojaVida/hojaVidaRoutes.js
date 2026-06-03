@@ -2592,5 +2592,138 @@ router.put('/actualizacion_examenes', (req, res) => {
     });
 });
 
+/**
+ * GET /api/hojas-vida/notificaciones
+ * Obtiene todos los registros que contengan HISTORIAL_EXAMENES e INFO_LIBERACION
+ */
+router.get('/notificaciones', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        let payload;
+        try {
+            payload = jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        console.log('[GET /notificaciones] 🔔 Consultando registros con HISTORIAL_EXAMENES e INFO_LIBERACION...');
+
+        // Filtrar registros que tengan HISTORIAL_EXAMENES e INFO_LIBERACION con elementos
+        const notificaciones = await HojaVida.find({
+            HISTORIAL_EXAMENES: { $exists: true, $ne: [], $not: { $size: 0 } },
+            INFO_LIBERACION: { $exists: true, $ne: [], $not: { $size: 0 } }
+        })
+        .populate('IPS_ID')
+        .populate('USUARIO_ID', 'Cr_Nombre_Usuario Cr_Correo Cr_Pe_Codigo')
+        .populate('USUARIO_SIC')
+        .populate('USUARIO_GESTOR_CIERRE', 'Cr_Nombre_Usuario Cr_Correo')
+        .populate('RUTA_BIOMETRIA.id_usuario', 'Cr_Nombre_Usuario Cr_Correo')
+        .populate('RUTA_PSICOLOGIA.id_usuario', 'Cr_Nombre_Usuario Cr_Correo')
+        .populate('RUTA_EXAMENES.id_usuario', 'Cr_Nombre_Usuario Cr_Correo')
+        .populate('HISTORIAL_EXAMENES.id_usuario_cambio', 'Cr_Nombre_Usuario Cr_Correo')
+        .populate('HISTORIAL_EXAMENES.id_usuario_original', 'Cr_Nombre_Usuario Cr_Correo')
+        .populate('HISTORIAL_BIOMETRIA.id_usuario_cambio', 'Cr_Nombre_Usuario Cr_Correo')
+        .populate('HISTORIAL_BIOMETRIA.id_usuario_original', 'Cr_Nombre_Usuario Cr_Correo')
+        .populate('INFO_LIBERACION.usuario_id', 'Cr_Nombre_Usuario Cr_Correo')
+        .sort({ updatedAt: -1 }) // Más recientes primero
+        .lean();
+
+        console.log('[GET /notificaciones] ✅ Consulta completada');
+        console.log('[GET /notificaciones] 📊 Total de registros encontrados:', notificaciones.length);
+
+        // Si no hay registros
+        if (!notificaciones || notificaciones.length === 0) {
+            return res.status(200).json({
+                error: 0,
+                response: {
+                    mensaje: 'No se encontraron notificaciones',
+                    total: 0,
+                    notificaciones: []
+                }
+            });
+        }
+
+        // Enriquecer cada notificación con información adicional
+        const notificacionesEnriquecidas = await Promise.all(
+            notificaciones.map(async (hv) => {
+                let resultado = { ...hv };
+
+                // Agregar información de IPS si existe
+                if (hv && hv.IPS_ID && typeof hv.IPS_ID === 'object') {
+                    resultado.IPS = hv.IPS_ID;
+                }
+
+                // Cruce USUARIO_SIC -> cl_credencial (User) para obtener Cr_Pe_Codigo
+                const usuarioSic = hv?.USUARIO_SIC ? String(hv.USUARIO_SIC).trim() : '';
+                if (usuarioSic && usuarioSic.length === 24) {
+                    try {
+                        const cred = await User.findById(usuarioSic).select('Cr_Pe_Codigo').lean();
+                        const permisoId = cred?.Cr_Pe_Codigo || null;
+                        if (permisoId) {
+                            const permiso = await Permiso
+                                .findById(permisoId)
+                                .select('Pe_Nombre Pe_Apellido Pe_Seg_Apellido')
+                                .lean();
+
+                            resultado.Cr_Pe_Codigo = permisoId;
+                            resultado.PERMISO_USUARIO_SIC = permiso || null;
+                        }
+                    } catch (e) {
+                        // Silenciar errores por registro individual
+                    }
+                }
+
+                // Agregar contadores de historial
+                resultado.total_historial_examenes = hv.HISTORIAL_EXAMENES?.length || 0;
+                resultado.total_info_liberacion = hv.INFO_LIBERACION?.length || 0;
+
+                return resultado;
+            })
+        );
+
+        console.log('[GET /notificaciones] ✅ Datos enriquecidos correctamente');
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Consulta exitosa',
+                total: notificacionesEnriquecidas.length,
+                notificaciones: notificacionesEnriquecidas
+            }
+        });
+
+    } catch (error) {
+        console.error('[GET /notificaciones] ❌ Error:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error interno del servidor',
+                detalle: error.message
+            }
+        });
+    }
+});
+
 
 module.exports = router;

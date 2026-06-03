@@ -61,7 +61,8 @@ const hojaVidaSchema = new mongoose.Schema(
             fecha_anterior: { type: Date },
             fecha_cambio: { type: Date, default: Date.now },
             notas_cambio: { type: String },
-            id_usuario_cambio: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+            id_usuario_cambio: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            leido: { type: Boolean, default: false }
         }],
         RUTA_PSICOLOGIA: {
             ruta: { type: String, default: null },
@@ -79,13 +80,15 @@ const hojaVidaSchema = new mongoose.Schema(
             fecha_anterior: { type: Date },
             fecha_cambio: { type: Date, default: Date.now },
             notas_cambio: { type: String },
-            id_usuario_cambio: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+            id_usuario_cambio: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            leido: { type: Boolean, default: false }
         }],
         INFO_LIBERACION: [{
             caso_id: { type: String },
             informe_liberacion: { type: String },
             usuario_id: { type: String },
-            fecha_liberacion: { type: Date, default: Date.now }
+            fecha_liberacion: { type: Date, default: Date.now },
+            leido: { type: Boolean, default: false }
         }],
         // Campos de cierre de caso
         USUARIO_GESTOR_CIERRE: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

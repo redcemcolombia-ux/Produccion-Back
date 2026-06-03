@@ -2593,8 +2593,153 @@ router.put('/actualizacion_examenes', (req, res) => {
 });
 
 /**
+ * PUT /api/hojas-vida/notificaciones/marcar-leido
+ * Marca como leídos elementos específicos de HISTORIAL_EXAMENES, INFO_LIBERACION y HISTORIAL_BIOMETRIA
+ */
+router.put('/notificaciones/marcar-leido', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        let payload;
+        try {
+            payload = jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        const {
+            hoja_vida_id,
+            historial_examenes_ids = [],
+            info_liberacion_ids = [],
+            historial_biometria_ids = []
+        } = req.body;
+
+        console.log('[PUT /notificaciones/marcar-leido] 📝 Datos recibidos:');
+        console.log('[PUT /notificaciones/marcar-leido] - hoja_vida_id:', hoja_vida_id);
+        console.log('[PUT /notificaciones/marcar-leido] - historial_examenes_ids:', historial_examenes_ids.length);
+        console.log('[PUT /notificaciones/marcar-leido] - info_liberacion_ids:', info_liberacion_ids.length);
+        console.log('[PUT /notificaciones/marcar-leido] - historial_biometria_ids:', historial_biometria_ids.length);
+
+        // Validar campo obligatorio
+        if (!hoja_vida_id) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El campo hoja_vida_id es obligatorio' }
+            });
+        }
+
+        // Validar formato de ID
+        if (hoja_vida_id.length !== 24) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'Formato de hoja_vida_id inválido' }
+            });
+        }
+
+        // Buscar la hoja de vida
+        console.log('[PUT /notificaciones/marcar-leido] 🔍 Buscando hoja de vida...');
+        const hojaVida = await HojaVida.findById(hoja_vida_id);
+
+        if (!hojaVida) {
+            console.log('[PUT /notificaciones/marcar-leido] ❌ Hoja de vida no encontrada');
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Hoja de vida no encontrada' }
+            });
+        }
+
+        console.log('[PUT /notificaciones/marcar-leido] ✅ Hoja de vida encontrada');
+
+        let actualizados = {
+            historial_examenes: 0,
+            info_liberacion: 0,
+            historial_biometria: 0
+        };
+
+        // Marcar como leído elementos de HISTORIAL_EXAMENES
+        if (historial_examenes_ids.length > 0 && hojaVida.HISTORIAL_EXAMENES) {
+            hojaVida.HISTORIAL_EXAMENES.forEach(item => {
+                if (historial_examenes_ids.includes(item._id.toString())) {
+                    item.leido = true;
+                    actualizados.historial_examenes++;
+                }
+            });
+        }
+
+        // Marcar como leído elementos de INFO_LIBERACION
+        if (info_liberacion_ids.length > 0 && hojaVida.INFO_LIBERACION) {
+            hojaVida.INFO_LIBERACION.forEach(item => {
+                if (info_liberacion_ids.includes(item._id.toString())) {
+                    item.leido = true;
+                    actualizados.info_liberacion++;
+                }
+            });
+        }
+
+        // Marcar como leído elementos de HISTORIAL_BIOMETRIA
+        if (historial_biometria_ids.length > 0 && hojaVida.HISTORIAL_BIOMETRIA) {
+            hojaVida.HISTORIAL_BIOMETRIA.forEach(item => {
+                if (historial_biometria_ids.includes(item._id.toString())) {
+                    item.leido = true;
+                    actualizados.historial_biometria++;
+                }
+            });
+        }
+
+        // Guardar cambios
+        console.log('[PUT /notificaciones/marcar-leido] 💾 Guardando cambios...');
+        await hojaVida.save();
+        console.log('[PUT /notificaciones/marcar-leido] ✅ Cambios guardados exitosamente');
+        console.log('[PUT /notificaciones/marcar-leido] 📊 Elementos actualizados:', actualizados);
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Notificaciones marcadas como leídas exitosamente',
+                actualizados: {
+                    historial_examenes: actualizados.historial_examenes,
+                    info_liberacion: actualizados.info_liberacion,
+                    historial_biometria: actualizados.historial_biometria,
+                    total: actualizados.historial_examenes + actualizados.info_liberacion + actualizados.historial_biometria
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('[PUT /notificaciones/marcar-leido] ❌ Error:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error interno del servidor',
+                detalle: error.message
+            }
+        });
+    }
+});
+
+/**
  * GET /api/hojas-vida/notificaciones
- * Obtiene todos los registros que contengan HISTORIAL_EXAMENES e INFO_LIBERACION
+ * Obtiene todos los registros que contengan HISTORIAL_EXAMENES e INFO_LIBERACION NO LEÍDOS
  */
 router.get('/notificaciones', async (req, res) => {
     try {
@@ -2627,12 +2772,42 @@ router.get('/notificaciones', async (req, res) => {
             });
         }
 
-        console.log('[GET /notificaciones] 🔔 Consultando registros con HISTORIAL_EXAMENES e INFO_LIBERACION...');
+        console.log('[GET /notificaciones] 🔔 Consultando registros con HISTORIAL_EXAMENES e INFO_LIBERACION NO LEÍDOS...');
 
-        // Filtrar registros que tengan HISTORIAL_EXAMENES e INFO_LIBERACION con elementos
+        // Filtrar registros que tengan al menos un elemento NO leído en HISTORIAL_EXAMENES o INFO_LIBERACION
         const notificaciones = await HojaVida.find({
-            HISTORIAL_EXAMENES: { $exists: true, $ne: [], $not: { $size: 0 } },
-            INFO_LIBERACION: { $exists: true, $ne: [], $not: { $size: 0 } }
+            $or: [
+                {
+                    HISTORIAL_EXAMENES: {
+                        $elemMatch: {
+                            $or: [
+                                { leido: { $ne: true } },
+                                { leido: { $exists: false } }
+                            ]
+                        }
+                    }
+                },
+                {
+                    INFO_LIBERACION: {
+                        $elemMatch: {
+                            $or: [
+                                { leido: { $ne: true } },
+                                { leido: { $exists: false } }
+                            ]
+                        }
+                    }
+                },
+                {
+                    HISTORIAL_BIOMETRIA: {
+                        $elemMatch: {
+                            $or: [
+                                { leido: { $ne: true } },
+                                { leido: { $exists: false } }
+                            ]
+                        }
+                    }
+                }
+            ]
         })
         .populate('IPS_ID')
         .populate('USUARIO_ID', 'Cr_Nombre_Usuario Cr_Correo Cr_Pe_Codigo')
@@ -2694,9 +2869,33 @@ router.get('/notificaciones', async (req, res) => {
                     }
                 }
 
-                // Agregar contadores de historial
-                resultado.total_historial_examenes = hv.HISTORIAL_EXAMENES?.length || 0;
-                resultado.total_info_liberacion = hv.INFO_LIBERACION?.length || 0;
+                // Filtrar solo elementos NO leídos
+                if (hv.HISTORIAL_EXAMENES) {
+                    resultado.HISTORIAL_EXAMENES = hv.HISTORIAL_EXAMENES.filter(
+                        item => item.leido !== true
+                    );
+                }
+
+                if (hv.INFO_LIBERACION) {
+                    resultado.INFO_LIBERACION = hv.INFO_LIBERACION.filter(
+                        item => item.leido !== true
+                    );
+                }
+
+                if (hv.HISTORIAL_BIOMETRIA) {
+                    resultado.HISTORIAL_BIOMETRIA = hv.HISTORIAL_BIOMETRIA.filter(
+                        item => item.leido !== true
+                    );
+                }
+
+                // Agregar contadores de elementos NO leídos
+                resultado.total_historial_examenes = resultado.HISTORIAL_EXAMENES?.length || 0;
+                resultado.total_info_liberacion = resultado.INFO_LIBERACION?.length || 0;
+                resultado.total_historial_biometria = resultado.HISTORIAL_BIOMETRIA?.length || 0;
+                resultado.total_notificaciones_no_leidas =
+                    resultado.total_historial_examenes +
+                    resultado.total_info_liberacion +
+                    resultado.total_historial_biometria;
 
                 return resultado;
             })

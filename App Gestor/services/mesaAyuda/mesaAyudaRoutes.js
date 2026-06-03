@@ -327,6 +327,127 @@ router.get('/escalamientos', async (req, res) => {
 });
 
 /**
+ * POST /api/mesa-ayuda/seguimientos
+ * Obtiene los escalamientos de un usuario específico (sus casos escalados)
+ */
+router.post('/seguimientos', async (req, res) => {
+    try {
+        // Validar token
+        const authHeader = req.headers['authorization'] || req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token requerido' }
+            });
+        }
+
+        const token = authHeader.substring(7);
+        const secret = process.env.JWT_SECRET;
+
+        if (!secret) {
+            return res.status(500).json({
+                error: 1,
+                response: { mensaje: 'Servidor sin JWT_SECRET configurado' }
+            });
+        }
+
+        let payload;
+        try {
+            payload = jwt.verify(token, secret);
+        } catch (e) {
+            return res.status(401).json({
+                error: 1,
+                response: { mensaje: 'Token inválido o expirado' }
+            });
+        }
+
+        // Obtener usuario_id del body
+        const { usuario_id } = req.body;
+
+        console.log('[POST /seguimientos] 📝 Consultando seguimientos para usuario:', usuario_id);
+
+        // Validar campo obligatorio
+        if (!usuario_id) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'El campo usuario_id es obligatorio' }
+            });
+        }
+
+        // Validar formato de usuario_id
+        if (usuario_id.length !== 24) {
+            return res.status(400).json({
+                error: 1,
+                response: { mensaje: 'Formato de usuario_id inválido' }
+            });
+        }
+
+        // Verificar que el usuario existe
+        const usuario = await User.findById(usuario_id);
+        if (!usuario) {
+            return res.status(404).json({
+                error: 1,
+                response: { mensaje: 'Usuario no encontrado' }
+            });
+        }
+
+        console.log('[POST /seguimientos] ✅ Usuario encontrado:', usuario.Cr_Nombre_Usuario);
+
+        // Obtener escalamientos del usuario específico
+        const escalamientos = await Escalamiento
+            .find({ usuario_id: usuario_id })
+            .populate('usuario_id', 'Cr_Nombre_Usuario Cr_Correo Cr_Pe_Codigo')
+            .populate('usuario_asignado', 'Cr_Nombre_Usuario Cr_Correo Cr_Pe_Codigo')
+            .sort({ createdAt: -1 }) // Más recientes primero
+            .lean();
+
+        console.log('[POST /seguimientos] 📊 Escalamientos encontrados:', escalamientos.length);
+
+        // Si no hay registros
+        if (!escalamientos || escalamientos.length === 0) {
+            return res.status(200).json({
+                error: 0,
+                response: {
+                    mensaje: 'No tiene casos escalados registrados',
+                    total: 0,
+                    data: []
+                }
+            });
+        }
+
+        // Agregar URLs de evidencia y resolución a cada escalamiento
+        const escalamientosConUrl = escalamientos.map(esc => ({
+            ...esc,
+            evidencia_url: esc.evidencia?.ruta
+                ? `https://redcemed.com/api/mesa-ayuda/evidencia/${esc._id}`
+                : null,
+            imagen_resolucion_url: esc.imagen_resolucion?.ruta
+                ? `https://redcemed.com/api/mesa-ayuda/evidencia-resolucion/${esc._id}`
+                : null
+        }));
+
+        return res.status(200).json({
+            error: 0,
+            response: {
+                mensaje: 'Consulta exitosa',
+                total: escalamientosConUrl.length,
+                data: escalamientosConUrl
+            }
+        });
+
+    } catch (error) {
+        console.error('[POST /seguimientos] ❌ Error:', error);
+        return res.status(500).json({
+            error: 1,
+            response: {
+                mensaje: 'Error interno del servidor',
+                detalle: error.message
+            }
+        });
+    }
+});
+
+/**
  * GET /api/mesa-ayuda/evidencia/:escalamientoId
  * Descarga/visualiza la imagen de evidencia de un escalamiento
  */

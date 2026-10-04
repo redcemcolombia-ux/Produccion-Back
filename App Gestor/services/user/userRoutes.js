@@ -10,6 +10,13 @@ const Permiso = require('../server/models/permiso/permiso');
 
 const router = express.Router();
 
+// Normaliza el perfil para que "usuario", "USUARIO" o "Usuario " queden como "Usuario"
+const normalizarPerfil = (perfil) => {
+    if (typeof perfil !== 'string') return perfil;
+    const limpio = perfil.trim();
+    return limpio.toLowerCase() === 'usuario' ? 'Usuario' : limpio;
+};
+
 router.post('/register', async (req, res) => {
     try {
 
@@ -115,7 +122,7 @@ router.post('/register', async (req, res) => {
         const usuarioDoc = await User.create({
             Cr_Nombre_Usuario: credenciales.Cr_Nombre_Usuario,
             Cr_Password: passwordHash,
-            Cr_Perfil: credenciales.Cr_Perfil,
+            Cr_Perfil: normalizarPerfil(credenciales.Cr_Perfil),
             Cr_Empresa: credenciales.Cr_Empresa,
             Cr_Ips: crIps,
             Cr_Estado: 'Activo',
@@ -238,7 +245,7 @@ router.post('/actualizar', async (req, res) => {
 
             // Actualizar otros campos de credenciales
             if (credenciales.Cr_Perfil !== undefined) {
-                updateData.Cr_Perfil = credenciales.Cr_Perfil;
+                updateData.Cr_Perfil = normalizarPerfil(credenciales.Cr_Perfil);
             }
             if (credenciales.Cr_Empresa !== undefined) {
                 updateData.Cr_Empresa = credenciales.Cr_Empresa;

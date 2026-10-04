@@ -228,8 +228,9 @@ router.get('/listar-usuarios', async (req, res) => {
             });
         }
 
-        // Buscar usuarios con perfil "Usuario"
-        const usuarios = await User.find({ Cr_Perfil: 'Usuario' })
+        // Buscar usuarios con perfil "Usuario" (sin distinguir mayúsculas ni espacios)
+        const usuarios = await User.find({ Cr_Perfil: /^\s*usuario\s*$/i })
+            .select('-Cr_Password')
             .populate('Cr_Pe_Codigo')
             .populate('Cr_Ips')
             .sort({ createdAt: -1 })

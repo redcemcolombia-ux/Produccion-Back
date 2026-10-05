@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
 const Examen = require('../server/models/examenes/examenes');
+const User = require('../server/models/user/user');
 
 const router = express.Router();
 
@@ -19,14 +20,13 @@ router.post('/crear', async (req, res) => {
         if (!secret) {
             return res.status(500).json({ error: 1, response: { mensaje: 'Servidor sin JWT_SECRET configurado' } });
         }
-        let decoded;
         try {
-            decoded = jwt.verify(token, secret);
+            jwt.verify(token, secret);
         } catch (e) {
             return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
         }
 
-        const { nombre, descripcion, estado } = req.body || {};
+        const { nombre, descripcion, estado, usuarioCreacion } = req.body || {};
 
         const nombreLimpio = typeof nombre === 'string' ? nombre.trim() : '';
         if (!nombreLimpio) {
@@ -55,6 +55,18 @@ router.post('/crear', async (req, res) => {
             estadoFinal = estado.trim().toUpperCase();
         }
 
+        const usuarioCreacionId = typeof usuarioCreacion === 'string' ? usuarioCreacion.trim() : '';
+        if (!usuarioCreacionId) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'El id del usuario que crea el examen es obligatorio' } });
+        }
+        if (!mongoose.Types.ObjectId.isValid(usuarioCreacionId)) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'El id del usuario que crea el examen no es válido' } });
+        }
+        const usuarioExiste = await User.exists({ _id: usuarioCreacionId });
+        if (!usuarioExiste) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'No se encontró el usuario que crea el examen' } });
+        }
+
         const examenDuplicado = await Examen
             .findOne({ NOMBRE: nombreLimpio })
             .collation({ locale: 'en', strength: 2 })
@@ -64,13 +76,11 @@ router.post('/crear', async (req, res) => {
             return res.status(409).json({ error: 1, response: { mensaje: `Ya existe un examen con el nombre '${nombreLimpio}'` } });
         }
 
-        const usuarioCreacion = decoded && mongoose.Types.ObjectId.isValid(decoded.userId) ? decoded.userId : null;
-
         const examenDoc = await Examen.create({
             NOMBRE: nombreLimpio,
             DESCRIPCION: descripcionLimpia,
             ESTADO: estadoFinal,
-            USUARIO_CREACION: usuarioCreacion
+            USUARIO_CREACION: usuarioCreacionId
         });
 
         return res.status(201).json({
@@ -82,6 +92,7 @@ router.post('/crear', async (req, res) => {
                     NOMBRE: examenDoc.NOMBRE,
                     DESCRIPCION: examenDoc.DESCRIPCION,
                     ESTADO: examenDoc.ESTADO,
+                    USUARIO_CREACION: examenDoc.USUARIO_CREACION,
                     createdAt: examenDoc.createdAt
                 }
             }
@@ -113,6 +124,7 @@ router.get('/consultar', async (req, res) => {
         // Con .lean() no aplica el toJSON de User: limitar campos para no exponer Cr_Password
         const examenes = await Examen.find({})
             .populate('USUARIO_CREACION', 'Cr_Nombre_Usuario Cr_Perfil')
+            .populate('USUARIO_MODIFICACION', 'Cr_Nombre_Usuario Cr_Perfil')
             .sort({ createdAt: -1 })
             .lean();
 
@@ -148,8 +160,8 @@ router.put('/actualizar-estado', async (req, res) => {
             return res.status(401).json({ error: 1, response: { mensaje: 'Token inválido o expirado' } });
         }
 
-        // Solo se leen id y estado; cualquier otro campo del body se ignora
-        const { id, estado: estadoRaw } = req.body || {};
+        // Solo se leen id, estado y usuarioModificacion; cualquier otro campo del body se ignora
+        const { id, estado: estadoRaw, usuarioModificacion } = req.body || {};
 
         if (!id) {
             return res.status(400).json({ error: 1, response: { mensaje: 'El id del examen es obligatorio' } });
@@ -166,6 +178,18 @@ router.put('/actualizar-estado', async (req, res) => {
             return res.status(400).json({ error: 1, response: { mensaje: 'El estado debe ser ACTIVO o INACTIVO' } });
         }
 
+        const usuarioModificacionId = typeof usuarioModificacion === 'string' ? usuarioModificacion.trim() : '';
+        if (!usuarioModificacionId) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'El id del usuario que modifica el examen es obligatorio' } });
+        }
+        if (!mongoose.Types.ObjectId.isValid(usuarioModificacionId)) {
+            return res.status(400).json({ error: 1, response: { mensaje: 'El id del usuario que modifica el examen no es válido' } });
+        }
+        const usuarioExiste = await User.exists({ _id: usuarioModificacionId });
+        if (!usuarioExiste) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'No se encontró el usuario que modifica el examen' } });
+        }
+
         const examen = await Examen.findById(id).lean();
         if (!examen) {
             return res.status(404).json({ error: 1, response: { mensaje: 'No se encontró el examen' } });
@@ -180,6 +204,8 @@ router.put('/actualizar-estado', async (req, res) => {
                         id: examen._id,
                         NOMBRE: examen.NOMBRE,
                         ESTADO: examen.ESTADO,
+                        USUARIO_MODIFICACION: examen.USUARIO_MODIFICACION ?? null,
+                        FECHA_MODIFICACION: examen.FECHA_MODIFICACION ?? null,
                         updatedAt: examen.updatedAt
                     }
                 }
@@ -188,7 +214,13 @@ router.put('/actualizar-estado', async (req, res) => {
 
         const examenActualizado = await Examen.findByIdAndUpdate(
             id,
-            { $set: { ESTADO: estado } },
+            {
+                $set: {
+                    ESTADO: estado,
+                    USUARIO_MODIFICACION: usuarioModificacionId,
+                    FECHA_MODIFICACION: new Date()
+                }
+            },
             { new: true, runValidators: true }
         ).lean();
 
@@ -204,6 +236,8 @@ router.put('/actualizar-estado', async (req, res) => {
                     id: examenActualizado._id,
                     NOMBRE: examenActualizado.NOMBRE,
                     ESTADO: examenActualizado.ESTADO,
+                    USUARIO_MODIFICACION: examenActualizado.USUARIO_MODIFICACION,
+                    FECHA_MODIFICACION: examenActualizado.FECHA_MODIFICACION,
                     updatedAt: examenActualizado.updatedAt
                 }
             }

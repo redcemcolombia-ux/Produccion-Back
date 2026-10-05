@@ -51,49 +51,59 @@ router.post('/crear', async (req, res) => {
             return res.status(400).json({ error: 1, response: { mensaje: 'No se enviaron datos de hojas de vida' } });
         }
 
-        const documentosEnviados = hojasVida
-            .map(hoja => hoja.DOCUMENTO)
-            .filter(doc => doc !== null && doc !== undefined && String(doc).trim() !== '')
-            .map(doc => String(doc).trim());
+        const limpiar = (valor) =>
+            valor !== null && valor !== undefined ? String(valor).trim() : '';
 
-        if (documentosEnviados.length === 0) {
+        // Pares DOCUMENTO + NUMERO_CURSO enviados (el mismo documento puede registrarse en otro curso)
+        const paresEnviados = hojasVida
+            .map(hoja => ({ documento: limpiar(hoja.DOCUMENTO), curso: limpiar(hoja.NUMERO_CURSO) }))
+            .filter(par => par.documento !== '');
+
+        if (paresEnviados.length === 0) {
             return res.status(400).json({ error: 1, response: { mensaje: 'No se encontraron documentos válidos en los datos enviados' } });
         }
 
         const documentosExistentes = await HojaVida.find({
-            DOCUMENTO: { $in: documentosEnviados }
-        }).select('DOCUMENTO NOMBRE PRIMER_APELLIDO').lean();
+            $or: paresEnviados.map(par => ({
+                DOCUMENTO: par.documento,
+                NUMERO_CURSO: par.curso !== '' ? par.curso : { $in: [null, ''] }
+            }))
+        }).select('DOCUMENTO NUMERO_CURSO NOMBRE PRIMER_APELLIDO').lean();
 
         if (documentosExistentes.length > 0) {
             const documentosDuplicados = documentosExistentes.map(doc => ({
                 documento: doc.DOCUMENTO,
+                numero_curso: doc.NUMERO_CURSO || null,
                 nombre: `${doc.NOMBRE || ''} ${doc.PRIMER_APELLIDO || ''}`.trim()
             }));
 
             return res.status(409).json({
                 error: 1,
                 response: {
-                    mensaje: 'Se encontraron documentos ya registrados',
+                    mensaje: 'Se encontraron documentos ya registrados en el mismo número de curso',
                     documentos_duplicados: documentosDuplicados,
                     total_duplicados: documentosDuplicados.length
                 }
             });
         }
 
-        const documentosUnicos = new Set();
+        const paresUnicos = new Set();
         const duplicadosInternos = [];
 
         for (const hoja of hojasVida) {
-            if (hoja.DOCUMENTO !== null && hoja.DOCUMENTO !== undefined && String(hoja.DOCUMENTO).trim() !== '') {
-                const doc = String(hoja.DOCUMENTO).trim();
-                if (documentosUnicos.has(doc)) {
-                    duplicadosInternos.push({
-                        documento: doc,
-                        nombre: `${hoja.NOMBRE || ''} ${hoja.PRIMER_APELLIDO || ''}`.trim()
-                    });
-                } else {
-                    documentosUnicos.add(doc);
-                }
+            const doc = limpiar(hoja.DOCUMENTO);
+            if (doc === '') continue;
+
+            const curso = limpiar(hoja.NUMERO_CURSO);
+            const clave = `${doc}|${curso}`;
+            if (paresUnicos.has(clave)) {
+                duplicadosInternos.push({
+                    documento: doc,
+                    numero_curso: curso || null,
+                    nombre: `${hoja.NOMBRE || ''} ${hoja.PRIMER_APELLIDO || ''}`.trim()
+                });
+            } else {
+                paresUnicos.add(clave);
             }
         }
 
@@ -101,7 +111,7 @@ router.post('/crear', async (req, res) => {
             return res.status(400).json({
                 error: 1,
                 response: {
-                    mensaje: 'Se encontraron documentos duplicados en el mismo envío',
+                    mensaje: 'Se encontraron documentos duplicados en el mismo número de curso dentro del envío',
                     documentos_duplicados_internos: duplicadosInternos,
                     total_duplicados: duplicadosInternos.length
                 }

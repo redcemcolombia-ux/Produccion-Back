@@ -59,7 +59,7 @@ router.put('/pdf', (req, res, next) => {
     });
 }, async (req, res) => {
     try {
-        const { id, token } = req.body;
+        const { id, token, examenes } = req.body;
 
 
         if (!id || !token || !req.file) {
@@ -78,14 +78,17 @@ router.put('/pdf', (req, res, next) => {
 
 
         const pdfUrl = `/uploads/pdf/${req.file.filename}`;
-        const update = await HojaVida.findByIdAndUpdate(
-            id,
-            {
-                PDF_URL: pdfUrl,
-                ESTADO: "EN ESPERA"
-            },
-            { new: true }
-        );
+        const campos = {
+            PDF_URL: pdfUrl,
+            ESTADO: "EN ESPERA"
+        };
+
+        // Campo opcional: solo se guarda si viene con contenido
+        if (typeof examenes === 'string' && examenes.trim() !== '') {
+            campos.EXAMENES_REALIZADOS = examenes.trim();
+        }
+
+        const update = await HojaVida.findByIdAndUpdate(id, campos, { new: true });
 
         if (!update) {
             return res.status(404).json({ error: 1, response: { mensaje: 'No se encontró el documento' } });
@@ -96,7 +99,8 @@ router.put('/pdf', (req, res, next) => {
             response: {
                 mensaje: 'PDF almacenado correctamente',
                 id: update._id,
-                url: pdfUrl
+                url: pdfUrl,
+                examenes: update.EXAMENES_REALIZADOS || null
             }
         });
 
@@ -130,7 +134,7 @@ router.put('/segunda-gestion', (req, res, next) => {
     });
 }, async (req, res) => {
     try {
-        const { id, token } = req.body;
+        const { id, token, examenes } = req.body;
 
         if (!id || !token || !req.file) {
             return res.status(400).json({ error: 1, response: { mensaje: 'Faltan parámetros requeridos' } });
@@ -146,15 +150,18 @@ router.put('/segunda-gestion', (req, res, next) => {
         }
 
         const pdfUrl = `/uploads/pdf/${req.file.filename}`;
-        const update = await HojaVida.findByIdAndUpdate(
-            id,
-            {
-                PDF_URL: pdfUrl,
-                ESTADO: "EN ESPERA",
-                SEGUNDA_GESTION_IPS: true
-            },
-            { new: true }
-        );
+        const campos = {
+            PDF_URL: pdfUrl,
+            ESTADO: "EN ESPERA",
+            SEGUNDA_GESTION_IPS: true
+        };
+
+        // Campo opcional: solo se guarda si viene con contenido
+        if (typeof examenes === 'string' && examenes.trim() !== '') {
+            campos.EXAMENES_SEGUNDA_GESTION = examenes.trim();
+        }
+
+        const update = await HojaVida.findByIdAndUpdate(id, campos, { new: true });
 
         if (!update) {
             return res.status(404).json({ error: 1, response: { mensaje: 'No se encontró el documento' } });
@@ -166,7 +173,8 @@ router.put('/segunda-gestion', (req, res, next) => {
                 mensaje: 'PDF almacenado correctamente con segunda gestión IPS',
                 id: update._id,
                 url: pdfUrl,
-                segunda_gestion_ips: true
+                segunda_gestion_ips: true,
+                examenes: update.EXAMENES_SEGUNDA_GESTION || null
             }
         });
 

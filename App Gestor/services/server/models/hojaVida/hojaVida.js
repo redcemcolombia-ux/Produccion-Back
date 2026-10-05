@@ -40,6 +40,8 @@ const hojaVidaSchema = new mongoose.Schema(
         FECHA_HORA: { type: Date },
         FECHA_HORA_CITA_PSICOLOGIA: { type: Date },
         EXAMENES: { type: String },
+        EXAMENES_REALIZADOS: { type: String },
+        EXAMENES_SEGUNDA_GESTION: { type: String },
         RECOMENDACIONES: { type: String },
         USUARIO_ID: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         DETALLE: { type: String },

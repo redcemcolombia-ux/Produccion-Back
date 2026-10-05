@@ -15,6 +15,7 @@ const ipsGestionRoutes = require('../../ipsGestion/ipsGestionRoutes');
 const psicoGestionRoutes = require('../../psicoGestion/psicoGestionRoutes');
 const controlUsoIpsRoutes = require('../../controlUsoIps/controlUsoIpsRoutes');
 const mesaAyudaRoutes = require('../../mesaAyuda/mesaAyudaRoutes');
+const examenesRoutes = require('../../examenes/examenesRoutes');
 
 class WebServer {
     constructor(port) {
@@ -81,6 +82,7 @@ class WebServer {
         this.app.use('/api/psicologia-gestion', psicoGestionRoutes);
         this.app.use('/api/control-uso-ips', controlUsoIpsRoutes);
         this.app.use('/api/mesa-ayuda', mesaAyudaRoutes);
+        this.app.use('/api/examenes', examenesRoutes);
     }
 
     /* _userAuthentication() {

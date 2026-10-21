@@ -2,7 +2,7 @@ const { mongoose } = require('../../conection/mongo');
 
 const soporteExamenActualizadoSchema = new mongoose.Schema({
     hojaVidaId: { type: mongoose.Schema.Types.ObjectId, ref: 'HojaVida', required: true, index: true },
-    solicitudId: { type: mongoose.Schema.Types.ObjectId, ref: 'SolicitudExamenActualizado', required: true, unique: true },
+    solicitudId: { type: mongoose.Schema.Types.ObjectId, ref: 'SolicitudExamenActualizado', required: false, unique: false },
     ipsId: { type: mongoose.Schema.Types.ObjectId, ref: 'IPS', required: true },
     usuarioId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     nombreArchivo: { type: String, required: true },

@@ -143,34 +143,21 @@ router.get('/:id/examenes-actualizados/solicitudes', autorizarCaso, async (req, 
 });
 
 router.post('/:id/examenes-actualizados', autorizarCaso, soloIps, recibirPdf, async (req, res, next) => {
-    if (!mongoose.isValidObjectId(req.body.solicitud_id) || !req.file ||
+    if (!req.file ||
         req.file.mimetype !== 'application/pdf' ||
         req.file.buffer.subarray(0, 5).toString() !== '%PDF-') {
-        return res.status(400).json({ error: 1, response: { mensaje: 'Se requiere solicitud_id y un PDF válido' } });
+        return res.status(400).json({ error: 1, response: { mensaje: 'Se requiere un PDF válido' } });
     }
 
     let archivo;
     try {
-        const solicitud = await Solicitud.findOne({
-            _id: req.body.solicitud_id,
-            hojaVidaId: req.params.id,
-            ipsId: req.soporteUsuario.ipsId
-        }).lean();
-        if (!solicitud) {
-            return res.status(404).json({ error: 1, response: { mensaje: 'Solicitud no encontrada para este aspirante e IPS' } });
-        }
-        await Soporte.init();
-        if (await Soporte.exists({ solicitudId: solicitud._id })) {
-            return res.status(409).json({ error: 1, response: { mensaje: 'La solicitud ya tiene un soporte' } });
-        }
-
         const nombreArchivo = `examen_actualizado_${req.params.id}_${randomUUID()}.pdf`;
         archivo = path.join(uploadDir, nombreArchivo);
         await fs.mkdir(uploadDir, { recursive: true });
         await fs.writeFile(archivo, req.file.buffer, { flag: 'wx' });
         const soporte = await Soporte.create({
             hojaVidaId: req.params.id,
-            solicitudId: solicitud._id,
+            solicitudId: req.body.solicitud_id || null,
             ipsId: req.soporteUsuario.ipsId,
             usuarioId: req.soporteUsuario.id,
             nombreArchivo,
@@ -179,9 +166,6 @@ router.post('/:id/examenes-actualizados', autorizarCaso, soloIps, recibirPdf, as
         return res.status(201).json({ error: 0, response: presentar(soporte) });
     } catch (error) {
         if (archivo) await fs.unlink(archivo).catch(() => {});
-        if (error.code === 11000) {
-            return res.status(409).json({ error: 1, response: { mensaje: 'La solicitud ya tiene un soporte' } });
-        }
         next(error);
     }
 });

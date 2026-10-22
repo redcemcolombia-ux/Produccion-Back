@@ -163,7 +163,8 @@ router.post('/:id/examenes-actualizados', autorizarCaso, soloIps, recibirPdf, as
             {
                 Segunda_Valoración_pdf: rutaCompleta,
                 Segunda_Valoración_date: new Date(),
-                Segunda_Valoración_user: req.soporteUsuario.id
+                Segunda_Valoración_user: req.soporteUsuario.id,
+                SEGUNDA_GESTION_IPS: true
             },
             { new: true }
         );

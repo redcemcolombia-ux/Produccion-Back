@@ -152,18 +152,37 @@ router.post('/:id/examenes-actualizados', autorizarCaso, soloIps, recibirPdf, as
     let archivo;
     try {
         const nombreArchivo = `examen_actualizado_${req.params.id}_${randomUUID()}.pdf`;
+        const rutaCompleta = `/uploads/pdf/examenes-actualizados/${nombreArchivo}`;
         archivo = path.join(uploadDir, nombreArchivo);
+
         await fs.mkdir(uploadDir, { recursive: true });
         await fs.writeFile(archivo, req.file.buffer, { flag: 'wx' });
-        const soporte = await Soporte.create({
-            hojaVidaId: req.params.id,
-            solicitudId: req.body.solicitud_id || null,
-            ipsId: req.soporteUsuario.ipsId,
-            usuarioId: req.soporteUsuario.id,
-            nombreArchivo,
-            nombreOriginal: path.basename(req.file.originalname)
+
+        const hojaVida = await HojaVida.findByIdAndUpdate(
+            req.params.id,
+            {
+                Segunda_Valoración_pdf: rutaCompleta,
+                Segunda_Valoración_date: new Date(),
+                Segunda_Valoración_user: req.soporteUsuario.id
+            },
+            { new: true }
+        );
+
+        if (!hojaVida) {
+            if (archivo) await fs.unlink(archivo).catch(() => {});
+            return res.status(404).json({ error: 1, response: { mensaje: 'Hoja de vida no encontrada' } });
+        }
+
+        return res.status(201).json({
+            error: 0,
+            response: {
+                id: hojaVida._id,
+                Segunda_Valoración_pdf: hojaVida.Segunda_Valoración_pdf,
+                Segunda_Valoración_date: hojaVida.Segunda_Valoración_date,
+                Segunda_Valoración_user: hojaVida.Segunda_Valoración_user,
+                nombre_original: path.basename(req.file.originalname)
+            }
         });
-        return res.status(201).json({ error: 0, response: presentar(soporte) });
     } catch (error) {
         if (archivo) await fs.unlink(archivo).catch(() => {});
         next(error);

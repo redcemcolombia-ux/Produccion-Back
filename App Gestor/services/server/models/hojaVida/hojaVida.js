@@ -99,6 +99,10 @@ const hojaVidaSchema = new mongoose.Schema(
         TIPO_CIERRE: { type: String, default: null },
         FECHA_CIERRE: { type: Date, default: null },
         SEGUNDA_GESTION_IPS: { type: Boolean, default: false },
+        // Campos de segunda valoración
+        Segunda_Valoración_pdf: { type: String, default: null },
+        Segunda_Valoración_date: { type: Date, default: null },
+        Segunda_Valoración_user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
         // Campos de lectura de notificaciones por campo
         leido_ruta_biometria: { type: Boolean, default: false },
         leido_ruta_psicologia: { type: Boolean, default: false },

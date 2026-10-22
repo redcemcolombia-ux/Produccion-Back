@@ -225,4 +225,42 @@ router.get('/:id/examenes-actualizados/:soporteId/archivo', autorizarCaso, async
     }
 });
 
+router.get('/:id/segunda-valoracion/archivo', autorizarCaso, async (req, res, next) => {
+    try {
+        const hojaVida = await HojaVida.findById(req.params.id).select('Segunda_Valoración_pdf IPS_ID').lean();
+
+        if (!hojaVida) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'Hoja de vida no encontrada' } });
+        }
+
+        if (!hojaVida.Segunda_Valoración_pdf) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'No existe PDF de segunda valoración' } });
+        }
+
+        // Validar acceso IPS
+        if (req.soporteUsuario.esIps && String(hojaVida.IPS_ID) !== String(req.soporteUsuario.ipsId)) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'Archivo no encontrado' } });
+        }
+
+        // Construir ruta del archivo desde la ruta guardada
+        // hojaVida.Segunda_Valoración_pdf = "/uploads/pdf/examenes-actualizados/examen_actualizado_xxx.pdf"
+        const rutaRelativa = hojaVida.Segunda_Valoración_pdf.replace('/uploads/pdf/examenes-actualizados/', '');
+        const archivoPath = path.join(uploadDir, rutaRelativa);
+
+        // Validar que el archivo existe
+        if (!await fs.access(archivoPath).then(() => true).catch(() => false)) {
+            return res.status(404).json({ error: 1, response: { mensaje: 'Archivo no disponible' } });
+        }
+
+        res.type('pdf');
+        res.sendFile(archivoPath, error => {
+            if (error && !res.headersSent) {
+                res.status(error.status || 500).json({ error: 1, response: { mensaje: 'Error al enviar archivo' } });
+            }
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 module.exports = router;
